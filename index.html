@@ -2090,8 +2090,11 @@ kbd {
     var secY = boxes.length ? Math.min(S.NY - 2, Math.max(2, boxes[0].y0 + 8)) : 8;
 
     push('改画全剖视图（A-A）',
-      '假想用剖切平面沿立板中间把零件切开，拿走前半部分，切口画 45° 剖面线；这样内部的孔就变成可见的了。剖切位置要在图上标 A-A。',
-      [{ t: 'polys', view: 'front', polys: sectionShape(S, secY) }]);
+      '假想用剖切平面沿立板中间把零件切开，拿走前半部分，切口画 45° 剖面线；这样内部的孔就变成可见的了。' +
+      '剖切位置要在俯视图上用粗短画 + 箭头标出来，并注上 A。',
+      [{ t: 'polys', view: 'front', polys: sectionShape(S, secY) },
+       { t: 'cut', view: 'top', at: secY, u0: 0, u1: W, dir: -1, label: 'A' },
+       { t: 'text', view: 'front', u: W - 12, w: -22, text: 'A\u2014A', size: 3.6 }]);
     steps[steps.length - 1].sec = true;
 
     push('半剖视图（一半剖、一半外形）',
@@ -2524,7 +2527,7 @@ kbd {
 
 </script>
 <script>
-/*!
+﻿/*!
  * 机械制图分步教练 · app.js
  * 界面、画布动画、步骤编辑。
  */
@@ -2816,6 +2819,55 @@ kbd {
       ctx.restore();
     }
 
+    function drawText(sh, active) {
+      ctx.save();
+      ctx.fillStyle = active ? '#c8452d' : '#1b1b1b';
+      ctx.font = '600 ' + Math.max(11, Math.min(20, (sh.size || 12) * s)) + 'px "Microsoft YaHei", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      var p = map(sh.view, sh.u, sh.w);
+      ctx.fillText(sh.text, p[0], p[1]);
+      ctx.restore();
+    }
+
+    // 剖切符号：剖切位置线（粗短画）+ 投射方向箭头 + 字母
+    function drawCut(sh, active) {
+      var col = active ? '#c8452d' : '#1b1b1b';
+      ctx.save();
+      ctx.strokeStyle = col;
+      ctx.fillStyle = col;
+      ctx.lineWidth = Math.max(2.5, 2.2 * s);
+      ctx.setLineDash([]);
+      var y = map(sh.view, 0, sh.at)[1];
+      var xa = map(sh.view, sh.u0, sh.at)[0];
+      var xb = map(sh.view, sh.u1, sh.at)[0];
+      var ext = 9 * s, arr = 6 * s;
+      var dirPx = sh.dir < 0 ? -1 : 1;
+
+      ctx.beginPath();
+      ctx.moveTo(xa - ext, y); ctx.lineTo(xa, y);
+      ctx.moveTo(xb, y); ctx.lineTo(xb + ext, y);
+      ctx.stroke();
+
+      function arrow(px) {
+        var tip = y + dirPx * arr * 1.6;
+        ctx.beginPath();
+        ctx.moveTo(px, tip);
+        ctx.lineTo(px - 4 * s, y + dirPx * arr * 0.3);
+        ctx.lineTo(px + 4 * s, y + dirPx * arr * 0.3);
+        ctx.closePath();
+        ctx.fill();
+      }
+      arrow(xa); arrow(xb);
+
+      ctx.font = '600 ' + Math.max(11, Math.min(18, 3.4 * s)) + 'px "Microsoft YaHei", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = dirPx < 0 ? 'bottom' : 'top';
+      ctx.fillText(sh.label, xa, y + dirPx * arr * 2.4);
+      ctx.fillText(sh.label, xb, y + dirPx * arr * 2.4);
+      ctx.restore();
+    }
+
     function drawStep(si, frac, active) {
       var st = T.steps[si];
       if (!st) return;
@@ -2840,7 +2892,8 @@ kbd {
           (sh.polys || []).forEach(function (p) {
             items.push({ pts: p.pts, style: p.style, view: sh.view, L: 0 });
           });
-        } else if (sh.t === 'dimH' || sh.t === 'dimV' || sh.t === 'leader') {
+        } else if (sh.t === 'dimH' || sh.t === 'dimV' || sh.t === 'leader' ||
+                   sh.t === 'cut' || sh.t === 'text') {
           specials.push(sh);
         } else {
           shapePolys(sh).forEach(function (p) { p.view = sh.view; items.push(p); });
@@ -2885,7 +2938,11 @@ kbd {
       });
 
       if (frac > 0.15) {
-        specials.forEach(function (sh) { drawDim(sh, active); });
+        specials.forEach(function (sh) {
+          if (sh.t === 'cut') drawCut(sh, active);
+          else if (sh.t === 'text') drawText(sh, active);
+          else drawDim(sh, active);
+        });
       }
     }
 
