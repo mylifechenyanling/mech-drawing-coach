@@ -1756,7 +1756,7 @@ kbd {
 
 </script>
 <script>
-/*!
+﻿/*!
  * 机械制图 · 教学步骤内核 solid.js
  *
  * 把三视图变成「一步一步画出来」的教学步骤。
@@ -2049,7 +2049,7 @@ kbd {
       var sf = [], sf2 = [];
       fH.forEach(function (h) {
         var cu = (h.u0 + h.u1) / 2, cw = (h.w0 + h.w1) / 2;
-        var r = Math.min(h.u1 - h.u0, h.w1 - h.w0) / 2;
+        var r = (Math.min(h.u1 - h.u0, h.w1 - h.w0) + 1.7) / 2;   // +补偿：空腔比孔径小约 1.7mm
         var hb = hostBox(cu, cw);
         var y0 = hb ? hb.y0 : 0, y1 = hb ? hb.y1 + 1 : D;
         sf.push({ view: 'front', t: 'circle', cu: cu, cw: cw, r: r });
@@ -2067,7 +2067,7 @@ kbd {
       var st1 = [], st2 = [];
       tH.forEach(function (h) {
         var cu = (h.u0 + h.u1) / 2, cw = (h.w0 + h.w1) / 2;
-        var r = Math.min(h.u1 - h.u0, h.w1 - h.w0) / 2;
+        var r = (Math.min(h.u1 - h.u0, h.w1 - h.w0) + 1.7) / 2;   // +补偿：空腔比孔径小约 1.7mm
         // 孔所在形体的 z 范围：立板还是底板，靠空洞中心判断
         var host = null;
         for (var bi2 = 0; bi2 < boxes.length; bi2++) {
@@ -2086,11 +2086,103 @@ kbd {
         '孔的轴线竖直，主视图和左视图上都不可见，各画两条虚线。', st2);
     }
 
+    // 剖视：沿立板中间切开（放在标注之前）
+    var secY = boxes.length ? Math.min(S.NY - 2, Math.max(2, boxes[0].y0 + 8)) : 8;
+    push('改画全剖视图（A-A）',
+      '假想用剖切平面沿立板中间把零件切开，拿走前半部分，切口画 45° 剖面线；' +
+      '这样本来在内部的孔就变成可见的了。剖切位置要在图上标 A-A。',
+      [{ t: 'polys', view: 'front', polys: sectionShape(S, secY) }]);
+
     push('检查、加深、标注',
       '擦掉多余作图线；粗实线加粗到 0.7mm，虚线用 3~4mm 线段、1mm 间隔；最后标尺寸——定形、定位、总体，别标成封闭尺寸链。',
       []);
+    var last = steps[steps.length - 1];
+    last.shapes = last.shapes.concat(buildDims(boxes, S, V));
 
     return steps;
+  }
+
+  /* ---------------- 4.5 尺寸标注 ---------------- */
+  function buildDims(boxes, S, V) {
+    var W = S.NX, D = S.NY, H = S.NZ;
+    var out = [];
+    var seen = {};
+
+    // 总体尺寸：长（主视图上方）、高（主视图左侧）、宽（俯视图右侧）
+    out.push({ view: 'front', t: 'dimH', u0: 0, u1: W, at: -14, src: 0, text: String(W) });
+    out.push({ view: 'front', t: 'dimV', w0: 0, w1: H, at: -22, src: 0, text: String(H) });
+    out.push({ view: 'top', t: 'dimV', w0: 0, w1: D, at: W + 14, src: 0, text: String(D) });
+
+    // 各形体的高度分段尺寸（链式，放在主视图左侧）
+    boxes.forEach(function (b) {
+      var h = b.z1 - b.z0 + 1;
+      if (h < H) {
+        var k = 'h' + b.z0 + '_' + b.z1;
+        if (!seen[k]) {
+          seen[k] = 1;
+          out.push({ view: 'front', t: 'dimV', w0: b.z0, w1: b.z1 + 1, at: -10, src: 0, text: String(h) });
+        }
+      }
+    });
+
+    // 孔的定位尺寸
+    var fH = (V && V.front ? V.front.holes : []) || [];
+    var tH = (V && V.top ? V.top.holes : []) || [];
+    fH.forEach(function (h) {
+      var cw = (h.w0 + h.w1) / 2;
+      out.push({ view: 'front', t: 'dimV', w0: 0, w1: cw, at: W + 12, src: 0, text: String(Math.round(cw)) });
+      out.push({ view: 'front', t: 'leader', u0: (h.u0 + h.u1) / 2, w0: (h.w0 + h.w1) / 2, u1: (h.u1 + h.u1) / 2 + 14, w1: (h.w0 + h.w1) / 2 - 12, text: '\u2300' + Math.round(h.u1 - h.u0 + 1.7) });
+    });
+    tH.forEach(function (h) {
+      var cu = (h.u0 + h.u1) / 2;
+      out.push({ view: 'top', t: 'dimH', u0: 0, u1: cu, at: D + 12, src: 0, text: String(Math.round(cu)) });
+      out.push({ view: 'top', t: 'leader', u0: cu, w0: (h.w0 + h.w1) / 2, u1: cu + 16, w1: (h.w0 + h.w1) / 2 + 12, text: '\u2300' + Math.round(h.u1 - h.u0 + 1.7) });
+    });
+
+    // 两孔的中心距
+    if (tH.length > 1) {
+      var c1 = (tH[0].u0 + tH[0].u1) / 2, c2 = (tH[1].u0 + tH[1].u1) / 2;
+      out.push({
+        view: 'top', t: 'dimH', u0: c1, u1: c2, at: D + 26, src: D,
+        text: String(Math.round(c2 - c1))
+      });
+    }
+
+    return out;
+  }
+
+  /* ---------------- 4.6 剖视：沿 y=at 切开，取剖面 ---------------- */
+  function sectionShape(S, atY) {
+    var NX = S.NX, NZ = S.NZ;
+    var mask = function (x, z) {
+      if (x < 0 || z < 0 || x >= NX || z >= NZ) return 0;
+      return S.g[(z * S.NY + atY) * NX + x];
+    };
+    var polys = [];
+    for (var z = 0; z < NZ; z++) {
+      for (var x = 0; x < NX; x++) {
+        if (!mask(x, z)) continue;
+        if (!mask(x, z - 1)) polys.push({ pts: [[x, z], [x + 1, z]], style: 'solid' });
+        if (!mask(x, z + 1)) polys.push({ pts: [[x, z + 1], [x + 1, z + 1]], style: 'solid' });
+        if (!mask(x - 1, z)) polys.push({ pts: [[x, z], [x, z + 1]], style: 'solid' });
+        if (!mask(x + 1, z)) polys.push({ pts: [[x + 1, z], [x + 1, z + 1]], style: 'solid' });
+      }
+    }
+    // 45° 剖面线，间距 4mm
+    for (var d = -(NX + NZ); d < NX; d += 4) {
+      var run = null;
+      for (var x2 = 0; x2 <= NX; x2++) {
+        var z2 = x2 - d;
+        var inside = (x2 >= 0 && x2 < NX && z2 >= 0 && z2 < NZ) ? mask(x2, z2) : 0;
+        if (inside) { if (run === null) run = x2; }
+        else if (run !== null) {
+          polys.push({ pts: [[run, run - d], [x2, x2 - d]], style: 'hatch' });
+          run = null;
+        }
+      }
+      if (run !== null) polys.push({ pts: [[run, run - d], [NX, NX - d]], style: 'hatch' });
+    }
+    return polys;
   }
 
   /* ---------------- 5. 主入口 ---------------- */
@@ -2502,7 +2594,8 @@ kbd {
   var TEACH_STYLE = {
     solid: { color: '#1b1b1b', w: 2.6, dash: null },
     hidden: { color: '#2f7dd1', w: 1.9, dash: [7, 4] },
-    aux: { color: '#7a63d6', w: 1.5, dash: [8, 3, 2, 3] }
+    aux: { color: '#7a63d6', w: 1.5, dash: [8, 3, 2, 3] },
+    hatch: { color: '#7a7a7a', w: 1.0, dash: null }
   };
 
   function shapePolys(sh) {
@@ -2544,26 +2637,93 @@ kbd {
     ctx.clearRect(0, 0, w, h);
 
     var T = S.teach, W = T.W, D = T.D, H = T.H, G = T.gap;
-    var vw = W + G + D, vh = H + G + D;
-    var pad = window.innerWidth <= 860 ? 8 : 26;
+    var M = 30;                                  // 留出标注的位置
+    var vw = W + G + D + M * 2, vh = H + G + D + M * 2;
+    var pad = window.innerWidth <= 860 ? 6 : 20;
     var s = Math.min((w - pad * 2) / vw, (h - pad * 2) / vh);
     var ox = (w - vw * s) / 2, oy = (h - vh * s) / 2;
 
     function map(view, u, v) {
       var vx = view === 'left' ? W + G : 0;
       var vy = view === 'top' ? H + G : 0;
-      return [ox + (vx + u) * s, oy + (vy + v) * s];
+      return [ox + (M + vx + u) * s, oy + (M + vy + v) * s];
     }
 
     ctx.fillStyle = '#fbfaf6';
     ctx.fillRect(ox, oy, vw * s, vh * s);
-    ctx.strokeStyle = '#e9e9e4';
+    ctx.strokeStyle = '#ececE7';
     ctx.lineWidth = 1;
     [[0, 0, W, H], [0, H + G, W, D], [W + G, 0, D, H]].forEach(function (fr) {
-      ctx.strokeRect(ox + fr[0] * s, oy + fr[1] * s, fr[2] * s, fr[3] * s);
+      ctx.strokeRect(ox + (M + fr[0]) * s, oy + (M + fr[1]) * s, fr[2] * s, fr[3] * s);
     });
 
     var at = stepAt(S.pos);
+
+    function drawDim(sh, active) {
+      var col = active ? '#c8452d' : '#1b1b1b';
+      ctx.save();
+      ctx.strokeStyle = col;
+      ctx.fillStyle = col;
+      ctx.lineWidth = 1.1;
+      ctx.setLineDash([]);
+      ctx.font = Math.max(10, Math.min(17, 10.5 * s + 4)) + 'px "Microsoft YaHei", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+
+      function P(u, w) { return map(sh.view, u, w); }
+      function arrow(px, py, dx, dy) {
+        var L = 7, Wd = 2.4;
+        var nx = -dy, ny = dx;
+        ctx.beginPath();
+        ctx.moveTo(px, py);
+        ctx.lineTo(px - dx * L + nx * Wd, py - dy * L + ny * Wd);
+        ctx.lineTo(px - dx * L - nx * Wd, py - dy * L - ny * Wd);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      if (sh.t === 'dimH') {
+        var sg = (sh.at - sh.src) >= 0 ? 1 : -1;
+        var ea = P(sh.u0, sh.src), eb = P(sh.u0, sh.at + 2 * sg);
+        var fa = P(sh.u1, sh.src), fb = P(sh.u1, sh.at + 2 * sg);
+        ctx.beginPath();
+        ctx.moveTo(ea[0], ea[1]); ctx.lineTo(eb[0], eb[1]);
+        ctx.moveTo(fa[0], fa[1]); ctx.lineTo(fb[0], fb[1]);
+        ctx.stroke();
+        var l0 = P(sh.u0, sh.at), l1 = P(sh.u1, sh.at);
+        ctx.beginPath(); ctx.moveTo(l0[0], l0[1]); ctx.lineTo(l1[0], l1[1]); ctx.stroke();
+        var d = l1[0] > l0[0] ? 1 : -1;
+        arrow(l0[0], l0[1], d, 0); arrow(l1[0], l1[1], -d, 0);
+        ctx.fillText(sh.text, (l0[0] + l1[0]) / 2, Math.min(l0[1], l1[1]) - 4);
+      } else if (sh.t === 'dimV') {
+        var sg2 = (sh.at - sh.src) >= 0 ? 1 : -1;
+        var ga = P(sh.src, sh.w0), gb = P(sh.at + 2 * sg2, sh.w0);
+        var ha = P(sh.src, sh.w1), hb = P(sh.at + 2 * sg2, sh.w1);
+        ctx.beginPath();
+        ctx.moveTo(ga[0], ga[1]); ctx.lineTo(gb[0], gb[1]);
+        ctx.moveTo(ha[0], ha[1]); ctx.lineTo(hb[0], hb[1]);
+        ctx.stroke();
+        var m0 = P(sh.at, sh.w0), m1 = P(sh.at, sh.w1);
+        ctx.beginPath(); ctx.moveTo(m0[0], m0[1]); ctx.lineTo(m1[0], m1[1]); ctx.stroke();
+        var d2 = m1[1] > m0[1] ? 1 : -1;
+        arrow(m0[0], m0[1], 0, d2); arrow(m1[0], m1[1], 0, -d2);
+        ctx.save();
+        ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+        ctx.fillText(sh.text, Math.min(m0[0], m1[0]) - 5, (m0[1] + m1[1]) / 2);
+        ctx.restore();
+      } else if (sh.t === 'leader') {
+        var p0 = P(sh.u0, sh.w0), p1 = P(sh.u1, sh.w1);
+        var dx = p0[0] - p1[0], dy = p0[1] - p1[1];
+        var len = Math.hypot(dx, dy) || 1;
+        ctx.beginPath(); ctx.moveTo(p0[0], p0[1]); ctx.lineTo(p1[0], p1[1]); ctx.stroke();
+        arrow(p0[0], p0[1], dx / len, dy / len);
+        ctx.save();
+        ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ctx.fillText(sh.text, p1[0] + 5, p1[1]);
+        ctx.restore();
+      }
+      ctx.restore();
+    }
 
     function drawStep(si, frac, active) {
       var st = T.steps[si];
@@ -2583,9 +2743,17 @@ kbd {
         ctx.restore();
       }
 
-      var items = [];
+      var items = [], specials = [];
       st.shapes.forEach(function (sh) {
-        shapePolys(sh).forEach(function (p) { p.view = sh.view; items.push(p); });
+        if (sh.t === 'polys') {
+          (sh.polys || []).forEach(function (p) {
+            items.push({ pts: p.pts, style: p.style, view: sh.view, L: 0 });
+          });
+        } else if (sh.t === 'dimH' || sh.t === 'dimV' || sh.t === 'leader') {
+          specials.push(sh);
+        } else {
+          shapePolys(sh).forEach(function (p) { p.view = sh.view; items.push(p); });
+        }
       });
       var total = 0;
       items.forEach(function (p) { p.L = polyLen(p.pts); total += p.L; });
@@ -2624,6 +2792,10 @@ kbd {
         ctx.restore();
         acc += p.L;
       });
+
+      if (frac > 0.15) {
+        specials.forEach(function (sh) { drawDim(sh, active); });
+      }
     }
 
     for (var i = 0; i < T.steps.length; i++) {
