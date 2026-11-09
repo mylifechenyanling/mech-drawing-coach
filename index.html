@@ -2086,12 +2086,42 @@ kbd {
         '孔的轴线竖直，主视图和左视图上都不可见，各画两条虚线。', st2);
     }
 
-    // 剖视：沿立板中间切开（放在标注之前）
+    // ---------- 剖视 / 断面一族 ----------
     var secY = boxes.length ? Math.min(S.NY - 2, Math.max(2, boxes[0].y0 + 8)) : 8;
+
     push('改画全剖视图（A-A）',
-      '假想用剖切平面沿立板中间把零件切开，拿走前半部分，切口画 45° 剖面线；' +
-      '这样本来在内部的孔就变成可见的了。剖切位置要在图上标 A-A。',
+      '假想用剖切平面沿立板中间把零件切开，拿走前半部分，切口画 45° 剖面线；这样内部的孔就变成可见的了。剖切位置要在图上标 A-A。',
       [{ t: 'polys', view: 'front', polys: sectionShape(S, secY) }]);
+    steps[steps.length - 1].sec = true;
+
+    push('半剖视图（一半剖、一半外形）',
+      '零件左右对称时用半剖：一半画剖视、一半画外形，分界处画细点划线。' +
+      '这样内外形状一张图就都表达清楚了，注意分界处不要画成粗实线。',
+      [{ t: 'polys', view: 'front', polys: sectionShape(S, function (x) { return x < W / 2 ? secY : -1; }) },
+       { t: 'center', view: 'front', cu: W / 2, cw: H / 2, arm: H / 2 + 4 }]);
+    steps[steps.length - 1].sec = true;
+
+    var lx0 = Math.round(W * 0.22), lx1 = Math.round(W * 0.74);
+    push('局部剖视图（只剖开需要看的地方）',
+      '只想看清局部内部结构时不必全剖：只剖开一小块，边界用波浪线断开，波浪线不能超出零件轮廓、也不能和其他线重合。',
+      [{ t: 'polys', view: 'front', polys: sectionShape(S, function (x, z) {
+          return (x >= lx0 && x <= lx1 && z >= 4 && z <= H - 6) ? secY : -1;
+        }) },
+       { t: 'polys', view: 'front', polys: [{ pts: wavyV(4, H - 6, lx1, 1.2), style: 'solid' }] }]);
+    steps[steps.length - 1].sec = true;
+
+    var sx = Math.round(W * 0.58);
+    var yA = Math.max(2, Math.round(D * 0.12)), yB = Math.min(D - 3, Math.round(D * 0.62));
+    push('阶梯剖视图（剖切面错开）',
+      '内部结构不在同一个平面时用阶梯剖：剖切平面阶梯状错开。转折处要用粗实线在图上标出剖切位置。',
+      [{ t: 'polys', view: 'front', polys: sectionShape(S, function (x) { return x < sx ? yA : yB; }) },
+       { t: 'polys', view: 'front', polys: [{ pts: [[sx, 0], [sx, H]], style: 'solid' }] }]);
+    steps[steps.length - 1].sec = true;
+
+    push('断面图（移出断面）',
+      '只画切口本身的形状、不画后面轮廓，叫断面图。这里把垂直于 X 的切口画在右下方，用细实线，并标注剖切符号。',
+      [{ t: 'polys', view: 'front', polys: sectionShapeX(S, Math.round(W / 2), W + GAP, H + 12) }]);
+    steps[steps.length - 1].sec = true;
 
     push('检查、加深、标注',
       '擦掉多余作图线；粗实线加粗到 0.7mm，虚线用 3~4mm 线段、1mm 间隔；最后标尺寸——定形、定位、总体，别标成封闭尺寸链。',
@@ -2151,12 +2181,16 @@ kbd {
     return out;
   }
 
-  /* ---------------- 4.6 剖视：沿 y=at 切开，取剖面 ---------------- */
-  function sectionShape(S, atY) {
+  /* ---------------- 4.6 剖视 / 断面 ---------------- */
+  // cutFn(x,z) 返回剖切平面的 y；返回 -1 表示这里不剖
+  function sectionShape(S, cutFn) {
     var NX = S.NX, NZ = S.NZ;
+    var fn = (typeof cutFn === 'function') ? cutFn : function () { return cutFn; };
     var mask = function (x, z) {
       if (x < 0 || z < 0 || x >= NX || z >= NZ) return 0;
-      return S.g[(z * S.NY + atY) * NX + x];
+      var y = fn(x, z);
+      if (y == null || y < 0 || y >= S.NY) return 0;
+      return S.g[(z * S.NY + y) * NX + x];
     };
     var polys = [];
     for (var z = 0; z < NZ; z++) {
@@ -2168,7 +2202,6 @@ kbd {
         if (!mask(x + 1, z)) polys.push({ pts: [[x + 1, z], [x + 1, z + 1]], style: 'solid' });
       }
     }
-    // 45° 剖面线，间距 4mm
     for (var d = -(NX + NZ); d < NX; d += 4) {
       var run = null;
       for (var x2 = 0; x2 <= NX; x2++) {
@@ -2183,6 +2216,60 @@ kbd {
       if (run !== null) polys.push({ pts: [[run, run - d], [NX, NX - d]], style: 'hatch' });
     }
     return polys;
+  }
+
+  // 断面：剖切面垂直于 X，在 (y,z) 里取剖面
+  function sectionShapeX(S, atX, uOff, wOff) {
+    var NY = S.NY, NZ = S.NZ, uo = uOff || 0, wo = wOff || 0;
+    if (atX < 0 || atX >= S.NX) return [];
+    var mask = function (y, z) {
+      if (y < 0 || z < 0 || y >= NY || z >= NZ) return 0;
+      return S.g[(z * NY + y) * S.NX + atX];
+    };
+    var polys = [];
+    for (var z = 0; z < NZ; z++) {
+      for (var y = 0; y < NY; y++) {
+        if (!mask(y, z)) continue;
+        if (!mask(y, z - 1)) polys.push({ pts: [[y + uo, z + wo], [y + 1 + uo, z + wo]], style: 'solid' });
+        if (!mask(y, z + 1)) polys.push({ pts: [[y + uo, z + 1 + wo], [y + 1 + uo, z + 1 + wo]], style: 'solid' });
+        if (!mask(y - 1, z)) polys.push({ pts: [[y + uo, z + wo], [y + uo, z + 1 + wo]], style: 'solid' });
+        if (!mask(y + 1, z)) polys.push({ pts: [[y + 1 + uo, z + wo], [y + 1 + uo, z + 1 + wo]], style: 'solid' });
+      }
+    }
+    for (var d = -(NY + NZ); d < NY; d += 4) {
+      var run = null;
+      for (var y2 = 0; y2 <= NY; y2++) {
+        var z2 = y2 - d;
+        var inside = (y2 >= 0 && y2 < NY && z2 >= 0 && z2 < NZ) ? mask(y2, z2) : 0;
+        if (inside) { if (run === null) run = y2; }
+        else if (run !== null) {
+          polys.push({ pts: [[run + uo, run - d + wo], [y2 + uo, y2 - d + wo]], style: 'hatch' });
+          run = null;
+        }
+      }
+      if (run !== null) polys.push({ pts: [[run + uo, run - d + wo], [NY + uo, NY - d + wo]], style: 'hatch' });
+    }
+    return polys;
+  }
+
+  // 波浪线：局部剖的断裂边界
+  function wavyLine(x0, x1, z, amp) {
+    var pts = [], n = Math.max(12, Math.round((x1 - x0) * 2.5));
+    for (var i = 0; i <= n; i++) {
+      var t = i / n;
+      pts.push([x0 + (x1 - x0) * t, z + Math.sin(t * Math.PI * 7) * (amp || 1.3)]);
+    }
+    return pts;
+  }
+
+  // 波浪线：局部剖的断裂边界（竖直方向）
+  function wavyV(z0, z1, x, amp) {
+    var pts = [], n = Math.max(12, Math.round((z1 - z0) * 2.5));
+    for (var i = 0; i <= n; i++) {
+      var t = i / n;
+      pts.push([x + Math.sin(t * Math.PI * 7) * (amp || 1.2), z0 + (z1 - z0) * t]);
+    }
+    return pts;
   }
 
   /* ---------------- 5. 主入口 ---------------- */
@@ -2659,6 +2746,10 @@ kbd {
 
     var at = stepAt(S.pos);
 
+    // 剖视族是互相替代的表达方法，同一时刻只显示当前那一种
+    var lastSec = -1;
+    for (var sj = 0; sj <= at.i; sj++) if (T.steps[sj] && T.steps[sj].sec) lastSec = sj;
+
     function drawDim(sh, active) {
       var col = active ? '#c8452d' : '#1b1b1b';
       ctx.save();
@@ -2799,7 +2890,10 @@ kbd {
     }
 
     for (var i = 0; i < T.steps.length; i++) {
-      if (i < at.i) drawStep(i, 1, false);
+      if (i < at.i) {
+        if (T.steps[i].sec && i !== lastSec) continue;
+        drawStep(i, 1, false);
+      }
       else if (i === at.i) { drawStep(i, at.f, at.f < 1); break; }
       else break;
     }
