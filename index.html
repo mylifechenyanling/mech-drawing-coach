@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
@@ -444,6 +444,7 @@ kbd {
       <div class="modes">
         <button id="m-teach" class="btn primary">教学步骤</button>
         <button id="m-trace" class="btn">描线</button>
+        <button id="m-conic" class="btn">截交线</button>
       </div>
       <button id="btn-settings" class="btn">⚙ 设置</button>
       <button id="btn-import" class="btn primary">导入图纸</button>
@@ -506,6 +507,16 @@ kbd {
         <label class="field">
           <span>比例 <input id="opt-ppm" class="num" type="number" min="0" step="0.1" value="0"> px/mm（0=自动估）</span>
         </label>
+        <div class="pane-title" style="margin-top:16px">截交线（圆锥被截切）</div>
+        <label class="field">
+          <span>截平面角度 <b id="ca-val">30</b>°</span>
+          <input id="opt-ca" type="range" min="0" max="78" value="30">
+        </label>
+        <label class="field">
+          <span>截切高度 <b id="ch-val">34</b></span>
+          <input id="opt-ch" type="range" min="6" max="55" value="34">
+        </label>
+        <div class="row2"><button id="btn-conic" class="btn block">看截交线演示</button></div>
         <div class="row2">
           <button id="btn-ignore" class="btn block">框掉文字</button>
           <button id="btn-clear-ignore" class="btn block">清除框选</button>
@@ -2313,6 +2324,189 @@ kbd {
 </script>
 <script>
 /*!
+ * 截交线引擎 conic.js
+ *
+ * 圆锥被平面截切 —— 解析求交，不是拟合。
+ *
+ * 坐标系：锥顶在 z=0，底面在 z=H，底圆半径 R。
+ * 高度 z 处的纬圆半径 r(z) = R·z/H
+ * 截平面（含 y 方向，法线在 xz 面内）：z = h + k·x ，k = tanα
+ *
+ * 求交：把 x = (z-h)/k 代入 x² + y² = r(z)²
+ *       y² = (R·z/H)² − ((z-h)/k)²
+ * 每个高度 z 最多给两个点（前后各一），这就是"纬圆法"。
+ */
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory();
+  else root.Conic = factory();
+})(typeof self !== 'undefined' ? self : this, function () {
+  'use strict';
+
+  function build(opts) {
+    var R = opts.R, H = opts.H;
+    var alpha = opts.alpha;                     // 截平面与水平面夹角（度）
+    var h = opts.h;                             // 截平面与轴线的交点高度
+    var k = Math.tan(alpha * Math.PI / 180);
+    var horizontal = Math.abs(k) < 1e-6;
+
+    // 判型：比值 = R·k/H，与圆锥半锥角的关系
+    var ratio = R * k / H;
+    var type;
+    if (horizontal) type = '圆';
+    else if (Math.abs(ratio) < 0.985) type = '椭圆';
+    else if (Math.abs(ratio) > 1.015) type = '双曲线';
+    else type = '抛物线';
+
+    // z 的可用范围：从"平面与轮廓素线相切"的两个高度之间
+    var zA = Infinity, zB = -Infinity;
+    if (!horizontal) {
+      if (Math.abs(1 - ratio) > 1e-9) zA = h / (1 - ratio);
+      if (Math.abs(1 + ratio) > 1e-9) zB = h / (1 + ratio);
+    }
+    var zmin, zmax;
+    if (horizontal) {
+      zmin = zmax = h;
+    } else {
+      zmin = Math.max(0, Math.min(zA, zB));
+      zmax = Math.min(H, Math.max(zA, zB));
+      if (!isFinite(zmin)) zmin = 0;
+      if (!isFinite(zmax)) zmax = H;
+    }
+    if (zmax < zmin) { var t0 = zmin; zmin = zmax; zmax = t0; }
+
+    // 采样曲线
+    var N = 160, curve = [], maxY = 0, widest = null;
+    for (var i = 0; i <= N; i++) {
+      var z = zmin + (zmax - zmin) * i / N;
+      var r = R * z / H;
+      var x = horizontal ? 0 : (z - h) / k;
+      var yy = r * r - x * x;
+      if (yy < -1e-6) continue;
+      yy = Math.sqrt(Math.max(0, yy));
+      if (yy > maxY) { maxY = yy; widest = { x: x, y: yy, z: z }; }
+      curve.push({ x: x, y: yy, z: z, edge: (i === 0 || i === N) });
+    }
+    if (!curve.length) return { error: '这个位置截不到圆锥' };
+
+    // 端点（与轮廓素线相切处）= 最高点/最低点
+    var pTop = curve[0], pBot = curve[curve.length - 1];
+
+    // 辅助平面（水平面）位置：把 z 范围等分
+    var aux = [];
+    var nAux = 4;
+    for (var a = 1; a <= nAux; a++) {
+      var zz = zmin + (zmax - zmin) * a / (nAux + 1);
+      var rr = R * zz / H;
+      var xx = horizontal ? 0 : (zz - h) / k;
+      var y2 = rr * rr - xx * xx;
+      if (y2 <= 0) continue;
+      aux.push({ z: zz, r: rr, x: xx, y: Math.sqrt(y2) });
+    }
+
+    return {
+      R: R, H: H, alpha: alpha, h: h, k: k, type: type,
+      zmin: zmin, zmax: zmax, curve: curve,
+      pTop: pTop, pBot: pBot, widest: widest, aux: aux
+    };
+  }
+
+  /* ---------------- 组装成"一步步画"的步骤 ---------------- */
+  // 视图尺寸：宽 2R，深 2R，高 H；坐标平移到 [0,2R]
+  function toSteps(D) {
+    var R = D.R, H = D.H;
+    var W = 2 * R, DD = 2 * R;
+    var cx = R, cy = R;                  // 圆心（模型坐标）
+    var steps = [];
+    function push(title, note, shapes, guides) {
+      steps.push({ title: title, note: note, shapes: shapes || [], guides: guides || [] });
+    }
+    function P(x, z) { return [x + cx, z]; }               // 主视图/左视图用
+    function Pt(x, y) { return [x + cx, y + cy]; }         // 俯视图用
+
+    // ① 画圆锥的三视图
+    push('① 画圆锥的三视图',
+      '先画圆锥的三个视图：主视图和左视图都是等腰三角形，俯视图是底圆（锥顶投影在圆心）。' +
+      '轮廓素线用粗实线，底面圆用粗实线，轴线和中心线用细点划线。',
+      [{ t: 'polys', view: 'front', polys: [{ pts: [P(-R, H), P(0, 0), P(R, H), P(-R, H)], style: 'solid' }] },
+       { t: 'polys', view: 'left', polys: [{ pts: [P(-R, H), P(0, 0), P(R, H), P(-R, H)], style: 'solid' }] },
+       { t: 'circle', view: 'top', cu: cx, cw: cy, r: R },
+       { t: 'center', view: 'front', cu: cx, cw: H / 2, arm: H / 2 + 4 },
+       { t: 'center', view: 'top', cu: cx, cw: cy, arm: R + 5 }]);
+
+    // ② 截平面的投影
+    var x0 = D.k === 0 ? -R : (0 - D.h) / D.k;
+    var x1 = D.k === 0 ? R : (H - D.h) / D.k;
+    push('② 画截平面的投影',
+      '在主视图上画出截平面的迹线：它与轴线的交点在高度 ' + Math.round(D.h) +
+      '，与水平面成 ' + Math.round(D.alpha) + '°。' +
+      '俯视图上，这个截平面的投影是两条竖直线——位置由迹线与底圆的交点定。',
+      [{ t: 'polys', view: 'front', polys: [{ pts: [P(Math.max(-R, Math.min(R, x0)), 0), P(Math.max(-R, Math.min(R, x1)), H)], style: 'aux' }] },
+       { t: 'polys', view: 'top', polys: [{ pts: [Pt(D.curve[0].x, -R), Pt(D.curve[0].x, R)], style: 'aux' },
+                                          { pts: [Pt(D.curve[D.curve.length - 1].x, -R), Pt(D.curve[D.curve.length - 1].x, R)], style: 'aux' }] }]);
+
+    // ③ 特殊点
+    var sT = D.pTop, sB = D.pBot;
+    push('③ 求特殊点（轮廓素线上的点）',
+      '特殊点是截交线的端点，一定在轮廓素线上：最高点 z=' + Math.round(sT.z) +
+      '，最低点 z=' + Math.round(sB.z) + '。' +
+      '在主视图上直接量出高度，再用「长对正」投到俯视图。',
+      [{ t: 'dot', view: 'front', u: sT.x + cx, w: sT.z },
+       { t: 'dot', view: 'front', u: sB.x + cx, w: sB.z },
+       { t: 'dot', view: 'top', u: sT.x + cx, w: sT.y + cy },
+       { t: 'dot', view: 'top', u: sT.x + cx, w: -sT.y + cy },
+       { t: 'dot', view: 'top', u: sB.x + cx, w: sB.y + cy },
+       { t: 'dot', view: 'top', u: sB.x + cx, w: -sB.y + cy }]);
+
+    // ④ 一般点：辅助平面法
+    var shapes4 = [], shapes4b = [];
+    D.aux.forEach(function (a, idx) {
+      shapes4b.push({ t: 'circle', view: 'top', cu: cx, cw: cy, r: a.r });   // 纬圆
+      shapes4b.push({ t: 'polys', view: 'top', polys: [{ pts: [Pt(a.x, -R), Pt(a.x, R)], style: 'aux' }] });
+      shapes4b.push({ t: 'dot', view: 'top', u: a.x + cx, w: a.y + cy });
+      shapes4b.push({ t: 'dot', view: 'top', u: a.x + cx, w: -a.y + cy });
+      shapes4.push({ t: 'polys', view: 'front', polys: [{ pts: [P(-R, a.z), P(R, a.z)], style: 'aux' }] });
+      shapes4.push({ t: 'dot', view: 'front', u: a.x + cx, w: a.z });
+    });
+    push('④ 作辅助平面求一般点',
+      '特殊点之间还差得远，要靠辅助平面补点：作一个水平辅助面，它和圆锥交出一个人纬圆，' +
+      '和截平面交出一条直线，两者的交点就是截交线上的点。换几个高度重复，点就够密了。',
+      shapes4.concat(shapes4b));
+
+    // ⑤ 光滑连线
+    var front = [], topUp = [], topDn = [], leftUp = [], leftDn = [];
+    D.curve.forEach(function (p) {
+      front.push(P(p.x, p.z));
+      topUp.push(Pt(p.x, p.y));
+      topDn.push(Pt(p.x, -p.y));
+      leftUp.push(P(p.y, p.z));
+      leftDn.push(P(-p.y, p.z));
+    });
+    push('⑤ 光滑连接成截交线',
+      '把求出的点依次连成光滑曲线，这就是截交线。' +
+      '这里是' + D.type + '：' +
+      (D.type === '圆' ? '截平面垂直于轴线。' :
+       D.type === '椭圆' ? '截平面与所有素线都相交。' :
+       D.type === '抛物线' ? '截平面平行于一条素线。' :
+       '截平面与两条素线相交，曲线在两端张开。'),
+      [{ t: 'polys', view: 'front', polys: [{ pts: front, style: 'solid' }] },
+       { t: 'polys', view: 'top', polys: [{ pts: topUp, style: 'solid' }, { pts: topDn, style: 'solid' }] },
+       { t: 'polys', view: 'left', polys: [{ pts: leftUp, style: 'solid' }, { pts: leftDn, style: 'solid' }] }]);
+
+    // ⑥ 可见性
+    push('⑥ 判断可见性、擦掉多余线',
+      '截交线在俯视图和左视图上以轴线为界：前半可见画粗实线，后半不可见画虚线。' +
+      '被截掉的那部分轮廓素线要擦掉，不要留着。',
+      []);
+
+    return { W: W, D: DD, H: H, gap: Math.max(16, R * 0.5), steps: steps, type: D.type };
+  }
+
+  return { build: build, toSteps: toSteps };
+});
+
+</script>
+<script>
+/*!
  * 内置示例图纸：一个「L 形支架」的三视图（第一角法）
  * 全部用 Canvas 2D 现画，不依赖外部图片，打开就能用。
  * 单位：毫米；S = 每毫米像素数。
@@ -2527,7 +2721,7 @@ kbd {
 
 </script>
 <script>
-﻿/*!
+/*!
  * 机械制图分步教练 · app.js
  * 界面、画布动画、步骤编辑。
  */
@@ -2595,7 +2789,7 @@ kbd {
   }
 
   function stepAt(pos) {
-    if (S.mode === 'teach') {
+    if (S.mode === 'teach' || S.mode === 'conic') {
       var n = S.steps.length;
       if (!n) return { i: 0, f: 0 };
       var p = Math.max(0, Math.min(n - 1e-6, pos));
@@ -2819,6 +3013,16 @@ kbd {
       ctx.restore();
     }
 
+    function drawDot(sh, active) {
+      var p = map(sh.view, sh.u, sh.w);
+      ctx.save();
+      ctx.fillStyle = active ? '#c8452d' : '#d4553a';
+      ctx.beginPath();
+      ctx.arc(p[0], p[1], Math.max(2.5, Math.min(5, 1.1 * s)), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
     function drawText(sh, active) {
       ctx.save();
       ctx.fillStyle = active ? '#c8452d' : '#1b1b1b';
@@ -2893,7 +3097,7 @@ kbd {
             items.push({ pts: p.pts, style: p.style, view: sh.view, L: 0 });
           });
         } else if (sh.t === 'dimH' || sh.t === 'dimV' || sh.t === 'leader' ||
-                   sh.t === 'cut' || sh.t === 'text') {
+                   sh.t === 'cut' || sh.t === 'text' || sh.t === 'dot') {
           specials.push(sh);
         } else {
           shapePolys(sh).forEach(function (p) { p.view = sh.view; items.push(p); });
@@ -2941,6 +3145,7 @@ kbd {
         specials.forEach(function (sh) {
           if (sh.t === 'cut') drawCut(sh, active);
           else if (sh.t === 'text') drawText(sh, active);
+          else if (sh.t === 'dot') drawDot(sh, active);
           else drawDim(sh, active);
         });
       }
@@ -3016,7 +3221,7 @@ kbd {
   }
 
   function render() {
-    if (S.mode === 'teach' && S.teach) { renderTeach(); return; }
+    if ((S.mode === 'teach' || S.mode === 'conic') && S.teach) { renderTeach(); return; }
     var w = cv.clientWidth, h = cv.clientHeight;
     if (!w || !h) return;
     ctx.setTransform(S.dpr, 0, 0, S.dpr, 0, 0);
@@ -3103,7 +3308,7 @@ kbd {
     if (!S.playing) { S.raf = 0; return; }
     var dt = S.lastTs ? Math.min(0.06, (ts - S.lastTs) / 1000) : 0.016;
     S.lastTs = ts;
-    var v = S.mode === 'teach' ? (S.speed / 1.5) : (820 * S.speed);
+    var v = (S.mode === 'teach' || S.mode === 'conic') ? (S.speed / 1.6) : (820 * S.speed);
     S.pos += v * dt;
     if (S.pos >= S.totalLen) { S.pos = S.totalLen; stop(); }
     syncCoach();
@@ -3134,7 +3339,7 @@ kbd {
   function jump(stepIndex) {
     if (!S.steps.length) return;
     stepIndex = Math.max(0, Math.min(S.steps.length - 1, stepIndex));
-    if (S.mode === 'teach') {
+    if (S.mode === 'teach' || S.mode === 'conic') {
       S.pos = stepIndex;
       syncCoach(); syncScrub(); render();
       return;
@@ -3541,11 +3746,52 @@ kbd {
     $('ignore-tip').textContent = '第 ' + n + ' 个框：拖出【' + VIEW_LABEL[w.order[w.idx]] + '】的区域';
   }
 
+  function startConic() {
+    var D = Conic.build({
+      R: +(S.conicR || 40),
+      H: +(S.conicH2 || 60),
+      alpha: +(S.conicAlpha != null ? S.conicAlpha : 30),
+      h: +(S.conicH != null ? S.conicH : 34)
+    });
+    if (D.error) { alert(D.error); return; }
+    var T = Conic.toSteps(D);
+    S.teach = T;
+    S.conicData = D;
+    S.steps = T.steps.map(function (s) {
+      return { title: s.title, note: s.note, strokes: [], len: 1, teach: true, kind: 'thick' };
+    });
+    S.totalLen = S.steps.length;
+    S.pos = 0;
+    var atC = /[?&]at=([\d.]+)/.exec(location.search);
+    if (atC) S.pos = S.totalLen * Math.max(0, Math.min(0.999, parseFloat(atC[1])));
+    S.lastCur = -1;
+    $('empty-hint').hidden = true;
+    $('coach').hidden = false;
+    updateConicStats(D);
+    renderSteps();
+    syncCoach();
+    render();
+  }
+
+  function updateConicStats(D) {
+    $('stats').innerHTML =
+      '<div class="stat"><b>' + D.type + '</b><span>截交线</span></div>' +
+      '<div class="stat"><b>' + Math.round(D.alpha) + '°</b><span>截平面</span></div>' +
+      '<div class="stat"><b>' + (S.steps.length) + '</b><span>步骤</span></div>';
+    $('legend').innerHTML =
+      '<div class="lg"><i style="background:#1b1b1b"></i>曲线类型<b>' + D.type + '</b></div>' +
+      '<div class="lg"><i style="background:#d4553a"></i>最高点 z<b>' + Math.round(D.pTop.z) + '</b></div>' +
+      '<div class="lg"><i style="background:#7a63d6"></i>最低点 z<b>' + Math.round(D.pBot.z) + '</b></div>' +
+      '<div class="lg"><i style="background:#2f7dd1"></i>辅助平面<b>' + D.aux.length + ' 个</b></div>';
+  }
+
   function setMode(m) {
     S.mode = m;
     $('m-teach').classList.toggle('primary', m === 'teach');
     $('m-trace').classList.toggle('primary', m === 'trace');
+    $('m-conic').classList.toggle('primary', m === 'conic');
     $('btn-views').style.display = m === 'teach' ? '' : 'none';
+    if (m === 'conic') { startConic(); return; }
     if (!S.img) return;
     if (m === 'teach' && !S.views) startWizard();
     else run();
@@ -3662,6 +3908,18 @@ kbd {
 
     $('m-teach').addEventListener('click', function () { setMode('teach'); });
     $('m-trace').addEventListener('click', function () { setMode('trace'); });
+    $('m-conic').addEventListener('click', function () { setMode('conic'); });
+    $('btn-conic').addEventListener('click', function () { setMode('conic'); });
+    $('opt-ca').addEventListener('input', function (e) {
+      $('ca-val').textContent = e.target.value;
+      S.conicAlpha = +e.target.value;
+      if (S.mode === 'conic') startConic();
+    });
+    $('opt-ch').addEventListener('input', function (e) {
+      $('ch-val').textContent = e.target.value;
+      S.conicH = +e.target.value;
+      if (S.mode === 'conic') startConic();
+    });
     $('btn-views').addEventListener('click', function () { if (S.img) startWizard(); });
     $('opt-ppm').addEventListener('change', function (e) {
       S.pxPerMM = Math.max(0, +e.target.value || 0);
@@ -3846,7 +4104,9 @@ kbd {
     resize();
     render();
 
-    if (location.search.indexOf('demo') >= 0 || location.search.indexOf('selftest') >= 0) {
+    if (location.search.indexOf('conic') >= 0) {
+      setTimeout(function () { setMode('conic'); }, 100);
+    } else if (location.search.indexOf('demo') >= 0 || location.search.indexOf('selftest') >= 0) {
       setTimeout(useDemo, 120);
     } else {
       // 首次打开提示用例
