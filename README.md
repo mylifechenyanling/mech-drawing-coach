@@ -2,6 +2,10 @@
 
 **一句话**：把一张已经画好的工程图喂进去，它把图拆成一条条笔画，按机械制图的规矩排好先后顺序，然后一笔一笔动给你看。
 
+> **在线版**：<https://mylifechenyanling.github.io/mech-drawing-coach/>
+> 手机点开就能用，不用下载、不用解压、不用装 App。源码在
+> [GitHub 仓库](https://github.com/mylifechenyanling/mech-drawing-coach)。
+
 ---
 
 ## 怎么用
