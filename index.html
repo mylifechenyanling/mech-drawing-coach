@@ -62,7 +62,20 @@ header {
 .brand .t1 { font-size: 16px; font-weight: 700; letter-spacing: .05em; }
 .brand .t2 { font-size: 13px; color: var(--muted); letter-spacing: .14em; margin-left: 2px; }
 
-.hdr-actions { display: flex; gap: 8px; }
+.hdr-actions { display: flex; gap: 8px; align-items: center; }
+
+.modes {
+  display: flex; gap: 3px; padding: 3px;
+  background: #121417; border-radius: 9px; border: 1px solid #22262c;
+}
+.modes .btn { border: none; background: transparent; padding: 5px 11px; font-size: 12.5px; }
+.modes .btn:hover { background: #262b33; }
+.modes .btn.primary { background: var(--accent); color: #fff; }
+.num {
+  width: 66px; background: var(--panel2); color: var(--text);
+  border: 1px solid var(--line); border-radius: 5px;
+  padding: 3px 6px; font: inherit; font-size: 12px; outline: none;
+}
 
 /* ---------------- buttons ---------------- */
 .btn {
@@ -428,6 +441,10 @@ kbd {
       <span class="t2">分步绘图教练</span>
     </div>
     <div class="hdr-actions">
+      <div class="modes">
+        <button id="m-teach" class="btn primary">教学步骤</button>
+        <button id="m-trace" class="btn">描线</button>
+      </div>
       <button id="btn-settings" class="btn">⚙ 设置</button>
       <button id="btn-import" class="btn primary">导入图纸</button>
       <button id="btn-demo" class="btn">示例图纸</button>
@@ -483,6 +500,12 @@ kbd {
         <div class="row2">
           <button id="btn-run" class="btn primary block">生成步骤</button>
         </div>
+        <div class="row2">
+          <button id="btn-views" class="btn block">框选三个视图</button>
+        </div>
+        <label class="field">
+          <span>比例 <input id="opt-ppm" class="num" type="number" min="0" step="0.1" value="0"> px/mm（0=自动估）</span>
+        </label>
         <div class="row2">
           <button id="btn-ignore" class="btn block">框掉文字</button>
           <button id="btn-clear-ignore" class="btn block">清除框选</button>
@@ -1734,6 +1757,380 @@ kbd {
 </script>
 <script>
 /*!
+ * 机械制图 · 教学步骤内核 solid.js
+ *
+ * 把三视图变成「一步一步画出来」的教学步骤。
+ * 核心思路：三视图 -> 体素实体 -> 长方体分解 -> 按形体出步骤
+ *
+ * 关键原理：一个点属于物体 当且仅当 它在三个视图的轮廓里都出现。
+ * 这就是「长对正 / 高平齐 / 宽相等」的数学形式。
+ */
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory();
+  else root.Solid = factory();
+})(typeof self !== 'undefined' ? self : this, function () {
+  'use strict';
+
+  var GAP = 24;          // 三个视图之间的间距（mm）
+  var MM = 0.7;          // 粗实线宽度（mm），国标定值，用来反推比例
+
+  /* ---------------- 1. 轮廓：从二值图里取出「有料」区域 ---------------- */
+  // rect 用处理图坐标；返回 mm 分辨率的布尔网格
+  function silhouette(bin, W, H, rect, pxPerMM) {
+    var x0 = Math.max(0, Math.round(rect.x)), y0 = Math.max(0, Math.round(rect.y));
+    var x1 = Math.min(W, Math.round(rect.x + rect.w)), y1 = Math.min(H, Math.round(rect.y + rect.h));
+    var w = x1 - x0, h = y1 - y0;
+    if (w < 4 || h < 4) return null;
+
+    // 先把墨线加粗 1px，保证外轮廓闭合
+    var m = new Uint8Array(w * h);
+    for (var y = 0; y < h; y++) {
+      for (var x = 0; x < w; x++) {
+        if (!bin[(y + y0) * W + (x + x0)]) continue;
+        m[y * w + x] = 1;
+        if (x > 0) m[y * w + x - 1] = 1;
+        if (x < w - 1) m[y * w + x + 1] = 1;
+        if (y > 0) m[(y - 1) * w + x] = 1;
+        if (y < h - 1) m[(y + 1) * w + x] = 1;
+      }
+    }
+    // 从边框上的空白点向里灌水，灌到的就是「外部」
+    var out = new Uint8Array(w * h);
+    var stack = [];
+    var push = function (x, y) {
+      if (x < 0 || y < 0 || x >= w || y >= h) return;
+      var i = y * w + x;
+      if (out[i] || m[i]) return;
+      out[i] = 1; stack.push(i);
+    };
+    for (var i2 = 0; i2 < w; i2++) { push(i2, 0); push(i2, h - 1); }
+    for (var j2 = 0; j2 < h; j2++) { push(0, j2); push(w - 1, j2); }
+    while (stack.length) {
+      var k = stack.pop(), kx = k % w, ky = (k / w) | 0;
+      push(kx - 1, ky); push(kx + 1, ky); push(kx, ky - 1); push(kx, ky + 1);
+    }
+
+    // 封闭空白 = 纸面但没被灌到水。必须在**像素级**判：
+    // 圆周线只有约 0.6mm 宽，1mm 网格会跨过去，孔就漏掉了。
+    var cavPix = new Uint8Array(w * h);
+    for (var c0 = 0; c0 < w * h; c0++) cavPix[c0] = (!out[c0] && !m[c0]) ? 1 : 0;
+
+    var lab = new Int32Array(w * h).fill(-1);
+    var comps = [];
+    var q2 = [];
+    for (var s1 = 0; s1 < w * h; s1++) {
+      if (!cavPix[s1] || lab[s1] >= 0) continue;
+      var id2 = comps.length, n2 = 0;
+      var a0 = 1e9, a1 = -1, b0 = 1e9, b1 = -1;
+      lab[s1] = id2; q2.length = 0; q2.push(s1);
+      while (q2.length) {
+        var k3 = q2.pop(), kx3 = k3 % w, ky3 = (k3 / w) | 0;
+        n2++;
+        if (kx3 < a0) a0 = kx3; if (kx3 > a1) a1 = kx3;
+        if (ky3 < b0) b0 = ky3; if (ky3 > b1) b1 = ky3;
+        if (kx3 > 0 && cavPix[k3 - 1] && lab[k3 - 1] < 0) { lab[k3 - 1] = id2; q2.push(k3 - 1); }
+        if (kx3 < w - 1 && cavPix[k3 + 1] && lab[k3 + 1] < 0) { lab[k3 + 1] = id2; q2.push(k3 + 1); }
+        if (ky3 > 0 && cavPix[k3 - w] && lab[k3 - w] < 0) { lab[k3 - w] = id2; q2.push(k3 - w); }
+        if (ky3 < h - 1 && cavPix[k3 + w] && lab[k3 + w] < 0) { lab[k3 + w] = id2; q2.push(k3 + w); }
+      }
+      comps.push({ area: n2, u0: a0, u1: a1, w0: b0, w1: b1, id: id2 });
+    }
+
+    // 孔：面积占比小、尺寸不太小（滤掉文字里的封闭笔画，比如「⌀」中间那个圈）
+    var holeIds = {};
+    var holeList = [];
+    comps.forEach(function (cp) {
+      var bw2 = cp.u1 - cp.u0 + 1, bh2 = cp.w1 - cp.w0 + 1;
+      if (cp.area < 120) return;
+      if (bw2 < 26 || bh2 < 26) return;
+      if (bw2 * bh2 > w * h * 0.18) return;      // 太大 = 零件内腔
+      holeIds[cp.id] = 1;
+      holeList.push(cp);
+    });
+
+    var wmm = Math.max(1, Math.round(w / pxPerMM));
+    var hmm = Math.max(1, Math.round(h / pxPerMM));
+    // 画线有粗细（粗实线约 0.7mm），轮廓按外沿算会大一圈，
+    // 所以先按半径侵蚀掉「半个线宽」，让轮廓回到线的中心线上。
+    var rad = Math.max(1, Math.round(pxPerMM * 0.28));
+    var er = new Uint8Array(w * h);
+    for (var ey = 0; ey < h; ey++) {
+      for (var ex = 0; ex < w; ex++) {
+        if (out[ey * w + ex]) continue;
+        var okE = true;
+        for (var dy2 = -rad; dy2 <= rad && okE; dy2++) {
+          for (var dx2 = -rad; dx2 <= rad; dx2++) {
+            var yy2 = ey + dy2, xx2 = ex + dx2;
+            if (yy2 < 0 || xx2 < 0 || yy2 >= h || xx2 >= w || out[yy2 * w + xx2]) { okE = false; break; }
+          }
+        }
+        if (okE) er[ey * w + ex] = 1;
+      }
+    }
+    var grid = new Uint8Array(wmm * hmm);
+    var ink = new Uint8Array(wmm * hmm);
+    var holeMask = new Uint8Array(wmm * hmm);
+    var kx = wmm / w, ky = hmm / h;
+    for (var gy = 0; gy < hmm; gy++) {
+      var sy = Math.min(h - 1, Math.round((gy + 0.5) / ky));
+      for (var gx = 0; gx < wmm; gx++) {
+        var sx = Math.min(w - 1, Math.round((gx + 0.5) / kx));
+        var p = sy * w + sx;
+        grid[gy * wmm + gx] = er[p] ? 1 : 0;
+        ink[gy * wmm + gx] = m[p] ? 1 : 0;
+        holeMask[gy * wmm + gx] = (lab[p] >= 0 && holeIds[lab[p]]) ? 1 : 0;
+      }
+    }
+
+    var holes = holeList.map(function (cp) {
+      return {
+        u0: cp.u0 * kx, u1: (cp.u1 + 1) * kx,
+        w0: cp.w0 * ky, w1: (cp.w1 + 1) * ky,
+        area: cp.area
+      };
+    });
+
+    return { grid: grid, w: wmm, h: hmm, holes: holes, holeMask: holeMask };
+  }
+
+  /* ---------------- 2. 体素雕刻 ---------------- */
+  function carve(f, t, l, useHoles) {
+    var NX = f.w, NY = t.h, NZ = f.h;
+    var solid = new Uint8Array(NX * NY * NZ);
+    for (var x = 0; x < NX; x++) {
+      for (var y = 0; y < NY; y++) {
+        if (!t.grid[y * t.w + x]) continue;
+        for (var z = 0; z < NZ; z++) {
+          if (!f.grid[z * f.w + x] || !l.grid[z * l.w + y]) continue;
+          if (useHoles && (f.holeMask[z * f.w + x] || t.holeMask[y * t.w + x] || l.holeMask[z * l.w + y])) continue;
+          solid[(z * NY + y) * NX + x] = 1;
+        }
+      }
+    }
+    return { g: solid, NX: NX, NY: NY, NZ: NZ };
+  }
+
+  // 形态学开运算：去掉 1 个体素厚的薄片（画线本身造成的边界噪声）
+  function open3(S) {
+    var NX = S.NX, NY = S.NY, NZ = S.NZ, g = S.g;
+    var idx = function (x, y, z) { return (z * NY + y) * NX + x; };
+    var at = function (x, y, z) {
+      if (x < 0 || y < 0 || z < 0 || x >= NX || y >= NY || z >= NZ) return 1;  // 边界当实心
+      return g[idx(x, y, z)];
+    };
+    var e = new Uint8Array(g.length);
+    for (var z = 0; z < NZ; z++)
+      for (var y = 0; y < NY; y++)
+        for (var x = 0; x < NX; x++) {
+          if (!g[idx(x, y, z)]) continue;
+          if (at(x - 1, y, z) && at(x + 1, y, z) && at(x, y - 1, z) &&
+              at(x, y + 1, z) && at(x, y, z - 1) && at(x, y, z + 1)) e[idx(x, y, z)] = 1;
+        }
+    var d = new Uint8Array(g.length);
+    for (z = 0; z < NZ; z++)
+      for (y = 0; y < NY; y++)
+        for (x = 0; x < NX; x++) {
+          if (e[idx(x, y, z)] ||
+              (x > 0 && e[idx(x - 1, y, z)]) || (x < NX - 1 && e[idx(x + 1, y, z)]) ||
+              (y > 0 && e[idx(x, y - 1, z)]) || (y < NY - 1 && e[idx(x, y + 1, z)]) ||
+              (z > 0 && e[idx(x, y, z - 1)]) || (z < NZ - 1 && e[idx(x, y, z + 1)])) d[idx(x, y, z)] = 1;
+        }
+    return { g: d, NX: NX, NY: NY, NZ: NZ };
+  }
+
+  function vox(S, x, y, z) {
+    if (x < 0 || y < 0 || z < 0 || x >= S.NX || y >= S.NY || z >= S.NZ) return 0;
+    return S.g[(z * S.NY + y) * S.NX + x];
+  }
+
+  /* ---------------- 3. 贪心分解成长方体 ---------------- */
+  function decompose(S) {
+    var g = S.g.slice();
+    var boxes = [];
+    var idx = function (x, y, z) { return (z * S.NY + y) * S.NX + x; };
+    var occ = function (x, y, z) { return g[idx(x, y, z)] === 1; };
+
+    for (var guard = 0; guard < 5000; guard++) {
+      // 找最靠下（z 大）、最靠后（y 小）、最靠左（x 小）的实心体素
+      var sx = -1, sy = -1, sz = -1;
+      for (var z = S.NZ - 1; z >= 0 && sz < 0; z--)
+        for (var y = 0; y < S.NY && sz < 0; y++)
+          for (var x = 0; x < S.NX; x++)
+            if (occ(x, y, z)) { sx = x; sy = y; sz = z; break; }
+      if (sz < 0) break;
+
+      var x0 = sx, x1 = sx, y0 = sy, y1 = sy, z0 = sz, z1 = sz;
+      var i;
+      while (x1 + 1 < S.NX && occ(x1 + 1, sy, sz)) x1++;
+      while (x0 - 1 >= 0 && occ(x0 - 1, sy, sz)) x0--;
+      var allX = function (yy, zz) {
+        for (i = x0; i <= x1; i++) if (!occ(i, yy, zz)) return false;
+        return true;
+      };
+      while (y1 + 1 < S.NY && allX(y1 + 1, sz)) y1++;
+      while (y0 - 1 >= 0 && allX(y0 - 1, sz)) y0--;
+      var allXY = function (zz) {
+        for (var yy = y0; yy <= y1; yy++) if (!allX(yy, zz)) return false;
+        return true;
+      };
+      while (z1 + 1 < S.NZ && allXY(z1 + 1)) z1++;
+      while (z0 - 1 >= 0 && allXY(z0 - 1)) z0--;
+
+      for (var zz2 = z0; zz2 <= z1; zz2++)
+        for (var yy2 = y0; yy2 <= y1; yy2++)
+          for (var xx2 = x0; xx2 <= x1; xx2++) g[idx(xx2, yy2, zz2)] = 0;
+
+      boxes.push({ x0: x0, x1: x1, y0: y0, y1: y1, z0: z0, z1: z1 });
+    }
+    return boxes;
+  }
+
+  function nameOf(b, NZ) {
+    var h = b.z1 - b.z0 + 1;
+    if (b.z1 >= NZ - 1 && h <= NZ * 0.35) return '底板';
+    if (b.z0 <= 0 && h >= NZ * 0.5) return '立板';
+    if (h >= NZ * 0.5) return '支板';
+    return '凸台';
+  }
+
+  /* ---------------- 4. 组装步骤 ---------------- */
+  function buildSteps(boxes, S, V) {
+    var f = V.front, t = V.top, l = V.left;
+    var steps = [];
+    var W = S.NX, D = S.NY, H = S.NZ;
+
+    function push(title, note, shapes, guides) {
+      steps.push({ title: title, note: note, shapes: shapes || [], guides: guides || [] });
+    }
+
+    // ① 基准
+    push('① 定基准',
+      '先画基准线：主视图、左视图的底面基准线，俯视图的前后基准线。所有尺寸都从基准量起，别急着画轮廓。',
+      [{ view: 'front', t: 'base', u0: 0, u1: W, w: H },
+       { view: 'left', t: 'base', u0: 0, u1: D, w: H },
+       { view: 'top', t: 'base', u0: 0, u1: W, w: 0 },
+       { view: 'top', t: 'base', u0: 0, u1: W, w: D }]);
+
+    for (var bi = 0; bi < boxes.length; bi++) {
+      var b = boxes[bi];
+      var nm = nameOf(b, H);
+      var w = b.x1 - b.x0 + 1, d = b.y1 - b.y0 + 1, h = b.z1 - b.z0 + 1;
+
+      push('画' + nm + '：主视图定形',
+        nm + '的正面投影是一个 ' + w + '×' + h + ' 的矩形，位置由底面基准线和左右边定出。' +
+        '先只在一个视图上把外形定下来，这一步不要管另外两个视图。',
+        [{ view: 'front', t: 'rect', u0: b.x0, u1: b.x1 + 1, w0: b.z0, w1: b.z1 + 1 }]);
+
+      push(nm + '的宽：长对正',
+        '主视图上这两条竖线在 x=' + b.x0 + ' 和 x=' + (b.x1 + 1) + '。按「长对正」，俯视图同一位置也要有对应的线；' +
+        '再按进深 ' + d + ' 定出前后边界。',
+        [{ view: 'top', t: 'rect', u0: b.x0, u1: b.x1 + 1, w0: b.y0, w1: b.y1 + 1 }],
+        [{ t: 'v', u: b.x0 }, { t: 'v', u: b.x1 + 1 }]);
+
+      push(nm + '的高：高平齐',
+        '主视图上这两条横线在 z=' + b.z0 + ' 和 z=' + (b.z1 + 1) + '。按「高平齐」，左视图同一高度也要有对应的线；' +
+        '再按进深 ' + d + ' 定出前后位置。',
+        [{ view: 'left', t: 'rect', u0: b.y0, u1: b.y1 + 1, w0: b.z0, w1: b.z1 + 1 }],
+        [{ t: 'h', w: b.z0 }, { t: 'h', w: b.z1 + 1 }]);
+    }
+
+    // 孔：直接从三个视图的「内部空腔」来，不再靠圆拟合
+    var fH = f.holes, tH = t.holes, lH = l.holes;
+
+    function hostBox(cu, cw) {
+      for (var i2 = 0; i2 < boxes.length; i2++) {
+        var bb = boxes[i2];
+        if (cu >= bb.x0 && cu <= bb.x1 + 1 && cw >= bb.z0 && cw <= bb.z1 + 1) return bb;
+      }
+      return null;
+    }
+
+    if (fH.length) {
+      var sf = [], sf2 = [];
+      fH.forEach(function (h) {
+        var cu = (h.u0 + h.u1) / 2, cw = (h.w0 + h.w1) / 2;
+        var r = Math.min(h.u1 - h.u0, h.w1 - h.w0) / 2;
+        var hb = hostBox(cu, cw);
+        var y0 = hb ? hb.y0 : 0, y1 = hb ? hb.y1 + 1 : D;
+        sf.push({ view: 'front', t: 'circle', cu: cu, cw: cw, r: r });
+        sf.push({ view: 'front', t: 'center', cu: cu, cw: cw, arm: r + 6 });
+        sf2.push({ view: 'top', t: 'hiddenV', u0: h.u0, u1: h.u1, w0: y0, w1: y1 });
+        sf2.push({ view: 'left', t: 'hiddenH', u0: y0, u1: y1, w0: h.w0, w1: h.w1 });
+      });
+      push('画主视图上的孔（' + Math.round(fH[0].u1 - fH[0].u0) + '×' + Math.round(fH[0].w1 - fH[0].w0) + '）',
+        '孔在主视图上是可见圆，圆心由中心线交点确定。圆规一次画成，不要描。', sf);
+      push('这个孔投到另外两个视图',
+        '孔的轴线是前后方向，所以在俯视图里缩成两条竖虚线、在左视图里缩成两条横虚线——不可见，画虚线。', sf2);
+    }
+
+    if (tH.length) {
+      var st1 = [], st2 = [];
+      tH.forEach(function (h) {
+        var cu = (h.u0 + h.u1) / 2, cw = (h.w0 + h.w1) / 2;
+        var r = Math.min(h.u1 - h.u0, h.w1 - h.w0) / 2;
+        // 孔所在形体的 z 范围：立板还是底板，靠空洞中心判断
+        var host = null;
+        for (var bi2 = 0; bi2 < boxes.length; bi2++) {
+          var bb2 = boxes[bi2];
+          if (cw >= bb2.y0 && cw <= bb2.y1 + 1) { host = bb2; break; }
+        }
+        var z0 = host ? host.z0 : 40, z1 = host ? host.z1 + 1 : H;
+        st1.push({ view: 'top', t: 'circle', cu: cu, cw: cw, r: r });
+        st1.push({ view: 'top', t: 'center', cu: cu, cw: cw, arm: r + 5 });
+        st2.push({ view: 'front', t: 'hiddenV', u0: h.u0, u1: h.u1, w0: z0, w1: z1 });
+        st2.push({ view: 'left', t: 'hiddenH', u0: h.u0, u1: h.u1 === h.u0 ? h.u0 : h.u1, w0: z0, w1: z1 });
+      });
+      push('画俯视图上的 ' + tH.length + ' 个孔',
+        '孔在俯视图上是可见圆，圆心由中心线交点确定。画完记得补中心线。', st1);
+      push('这些孔投到另外两个视图',
+        '孔的轴线竖直，主视图和左视图上都不可见，各画两条虚线。', st2);
+    }
+
+    push('检查、加深、标注',
+      '擦掉多余作图线；粗实线加粗到 0.7mm，虚线用 3~4mm 线段、1mm 间隔；最后标尺寸——定形、定位、总体，别标成封闭尺寸链。',
+      []);
+
+    return steps;
+  }
+
+  /* ---------------- 5. 主入口 ---------------- */
+  // opts: { bin, W, H, views:{front:{x,y,w,h}, top, left}, pxPerMM, holes }
+  function generate(opts) {
+    var f = silhouette(opts.bin, opts.W, opts.H, opts.views.front, opts.pxPerMM);
+    var t = silhouette(opts.bin, opts.W, opts.H, opts.views.top, opts.pxPerMM);
+    var l = silhouette(opts.bin, opts.W, opts.H, opts.views.left, opts.pxPerMM);
+    if (!f || !t || !l) return { error: '三个视图的区域太小，重新框一下' };
+
+    var S = carve(f, t, l, true);
+    var vol = 0;
+    for (var i = 0; i < S.g.length; i++) vol += S.g[i];
+    if (!vol) return { error: '没认出实体：三个视图的轮廓可能对不上' };
+
+    // 分解用「不含孔」的实体：孔是单独出步骤的，别让它把形体切碎
+    var S0 = open3(carve(f, t, l, false));
+    var boxes = decompose(S0);
+    boxes.sort(function (a, b) { return (b.z1 - a.z1) || ((b.x1 - b.x0) - (a.x1 - a.x0)); });
+
+    var steps = buildSteps(boxes, S, { front: f, top: t, left: l });
+    return {
+      solid: S, boxes: boxes, steps: steps,
+      W: S.NX, D: S.NY, H: S.NZ, gap: GAP, volume: vol,
+      holes: { front: f.holes, top: t.holes, left: l.holes }
+    };
+  }
+
+  return {
+    generate: generate,
+    silhouette: silhouette,
+    carve: carve,
+    decompose: decompose,
+    buildSteps: buildSteps
+  };
+});
+
+</script>
+<script>
+/*!
  * 内置示例图纸：一个「L 形支架」的三视图（第一角法）
  * 全部用 Canvas 2D 现画，不依赖外部图片，打开就能用。
  * 单位：毫米；S = 每毫米像素数。
@@ -1965,7 +2362,7 @@ kbd {
     img: null, imgW: 0, imgH: 0,   // 源图（canvas）
     plan: null,
     steps: [],
-    pos: 0,            // 全局笔画进度（按长度累计）
+    pos: 0,            // 描线模式：按长度累计；教学模式：浮点步骤号
     totalLen: 0,
     playing: false,
     speed: 1,
@@ -1978,7 +2375,12 @@ kbd {
     raf: 0,
     lastTs: 0,
     lastCur: -1,
-    busy: false
+    busy: false,
+    mode: 'teach',        // 'teach' 教学步骤 / 'trace' 描线
+    teach: null,
+    views: null,          // {front:{x,y,w,h}, top, left} 源图坐标
+    picking: null,        // 正在框哪个视图
+    pxPerMM: 0            // 0 = 自动估
   };
 
   var ACTIVE_COLOR = {
@@ -2011,6 +2413,13 @@ kbd {
   }
 
   function stepAt(pos) {
+    if (S.mode === 'teach') {
+      var n = S.steps.length;
+      if (!n) return { i: 0, f: 0 };
+      var p = Math.max(0, Math.min(n - 1e-6, pos));
+      var i0 = Math.floor(p);
+      return { i: i0, f: p - i0 };
+    }
     var acc = 0;
     for (var i = 0; i < S.steps.length; i++) {
       var L = S.steps[i].len;
@@ -2086,7 +2495,205 @@ kbd {
     return tip;
   }
 
+  /* ===================================================================
+   * 教学模式：三视图 → 实体 → 分步作图
+   * =================================================================== */
+
+  var TEACH_STYLE = {
+    solid: { color: '#1b1b1b', w: 2.6, dash: null },
+    hidden: { color: '#2f7dd1', w: 1.9, dash: [7, 4] },
+    aux: { color: '#7a63d6', w: 1.5, dash: [8, 3, 2, 3] }
+  };
+
+  function shapePolys(sh) {
+    var t = sh.t, out = [];
+    if (t === 'rect') {
+      out.push({ pts: [[sh.u0, sh.w0], [sh.u1, sh.w0], [sh.u1, sh.w1], [sh.u0, sh.w1], [sh.u0, sh.w0]], style: 'solid' });
+    } else if (t === 'circle') {
+      var pts = [], N = 56;
+      for (var i = 0; i <= N; i++) {
+        var a = i / N * Math.PI * 2;
+        pts.push([sh.cu + Math.cos(a) * sh.r, sh.cw + Math.sin(a) * sh.r]);
+      }
+      out.push({ pts: pts, style: 'solid' });
+    } else if (t === 'base') {
+      out.push({ pts: [[sh.u0, sh.w], [sh.u1, sh.w]], style: 'aux' });
+    } else if (t === 'center') {
+      out.push({ pts: [[sh.cu - sh.arm, sh.cw], [sh.cu + sh.arm, sh.cw]], style: 'aux' });
+      out.push({ pts: [[sh.cu, sh.cw - sh.arm], [sh.cu, sh.cw + sh.arm]], style: 'aux' });
+    } else if (t === 'hiddenV') {
+      out.push({ pts: [[sh.u0, sh.w0], [sh.u0, sh.w1]], style: 'hidden' });
+      out.push({ pts: [[sh.u1, sh.w0], [sh.u1, sh.w1]], style: 'hidden' });
+    } else if (t === 'hiddenH') {
+      out.push({ pts: [[sh.u0, sh.w0], [sh.u1, sh.w0]], style: 'hidden' });
+      out.push({ pts: [[sh.u0, sh.w1], [sh.u1, sh.w1]], style: 'hidden' });
+    }
+    return out;
+  }
+
+  function polyLen(pts) {
+    var L = 0;
+    for (var i = 1; i < pts.length; i++) L += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+    return L;
+  }
+
+  function renderTeach() {
+    var w = cv.clientWidth, h = cv.clientHeight;
+    if (!w || !h) return;
+    ctx.setTransform(S.dpr, 0, 0, S.dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+
+    var T = S.teach, W = T.W, D = T.D, H = T.H, G = T.gap;
+    var vw = W + G + D, vh = H + G + D;
+    var pad = window.innerWidth <= 860 ? 8 : 26;
+    var s = Math.min((w - pad * 2) / vw, (h - pad * 2) / vh);
+    var ox = (w - vw * s) / 2, oy = (h - vh * s) / 2;
+
+    function map(view, u, v) {
+      var vx = view === 'left' ? W + G : 0;
+      var vy = view === 'top' ? H + G : 0;
+      return [ox + (vx + u) * s, oy + (vy + v) * s];
+    }
+
+    ctx.fillStyle = '#fbfaf6';
+    ctx.fillRect(ox, oy, vw * s, vh * s);
+    ctx.strokeStyle = '#e9e9e4';
+    ctx.lineWidth = 1;
+    [[0, 0, W, H], [0, H + G, W, D], [W + G, 0, D, H]].forEach(function (fr) {
+      ctx.strokeRect(ox + fr[0] * s, oy + fr[1] * s, fr[2] * s, fr[3] * s);
+    });
+
+    var at = stepAt(S.pos);
+
+    function drawStep(si, frac, active) {
+      var st = T.steps[si];
+      if (!st) return;
+
+      if (active) {
+        ctx.save();
+        ctx.strokeStyle = '#a9c4e0';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([5, 5]);
+        (st.guides || []).forEach(function (g) {
+          var a, b;
+          if (g.t === 'v') { a = map('front', g.u, H); b = map('top', g.u, 0); }
+          else { a = map('front', W, g.w); b = map('left', 0, g.w); }
+          ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+        });
+        ctx.restore();
+      }
+
+      var items = [];
+      st.shapes.forEach(function (sh) {
+        shapePolys(sh).forEach(function (p) { p.view = sh.view; items.push(p); });
+      });
+      var total = 0;
+      items.forEach(function (p) { p.L = polyLen(p.pts); total += p.L; });
+
+      var target = total * frac, acc = 0;
+      items.forEach(function (p) {
+        if (acc >= target) return;
+        var remain = target - acc;
+        var f2 = remain >= p.L ? 1 : remain / p.L;
+        var stl = TEACH_STYLE[p.style] || TEACH_STYLE.solid;
+        var col = stl.color;
+        if (active && p.style === 'solid') col = '#d4553a';
+        ctx.save();
+        ctx.strokeStyle = col;
+        ctx.lineWidth = stl.w;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.setLineDash(stl.dash || []);
+        ctx.beginPath();
+        var p0 = map(p.view, p.pts[0][0], p.pts[0][1]);
+        ctx.moveTo(p0[0], p0[1]);
+        var t2 = p.L * f2, a2 = 0;
+        for (var i = 1; i < p.pts.length; i++) {
+          var q = map(p.view, p.pts[i][0], p.pts[i][1]);
+          var seg = Math.hypot(q[0] - p0[0], q[1] - p0[1]) * 0; // 用 mm 长度算，屏幕坐标只负责画
+          var segmm = Math.hypot(p.pts[i][0] - p.pts[i - 1][0], p.pts[i][1] - p.pts[i - 1][1]);
+          if (a2 + segmm <= t2) { ctx.lineTo(q[0], q[1]); a2 += segmm; }
+          else {
+            var k = (t2 - a2) / (segmm || 1);
+            var prev = map(p.view, p.pts[i - 1][0], p.pts[i - 1][1]);
+            ctx.lineTo(prev[0] + (q[0] - prev[0]) * k, prev[1] + (q[1] - prev[1]) * k);
+            break;
+          }
+        }
+        ctx.stroke();
+        ctx.restore();
+        acc += p.L;
+      });
+    }
+
+    for (var i = 0; i < T.steps.length; i++) {
+      if (i < at.i) drawStep(i, 1, false);
+      else if (i === at.i) { drawStep(i, at.f, at.f < 1); break; }
+      else break;
+    }
+  }
+
+  function buildTeach(data, plan) {
+    if (!S.views) {
+      alert('先框出主视图、俯视图、左视图三个区域');
+      return false;
+    }
+    var I = Engine._internals;
+    var W0 = data.width, H0 = data.height;
+    var gray = I.toGray(data.data, W0, H0, 4);
+    var ds = I.downscaleGray(gray, W0, H0, +$('opt-maxdim').value);
+    var bin = I.binarizeAdaptive(ds.gray, ds.w, ds.h, 9);
+    var sc = ds.scale;
+
+    var views = {};
+    ['front', 'top', 'left'].forEach(function (k) {
+      var v = S.views[k];
+      views[k] = { x: v.x * sc, y: v.y * sc, w: v.w * sc, h: v.h * sc };
+    });
+
+    var pxPerMM = +S.pxPerMM || 0;
+    if (!pxPerMM) {
+      var ws = plan.strokes.map(function (s) { return s.width; }).sort(function (a, b) { return a - b; });
+      var thick = ws.length ? ws[Math.min(ws.length - 1, Math.floor(ws.length * 0.85))] : 4;
+      pxPerMM = Math.max(1.2, thick / 0.7);
+    }
+
+    var holes = [];
+    plan.strokes.forEach(function (st) {
+      if (!st.circle) return;
+      var cx = st.circle.cx, cy = st.circle.cy, r = st.circle.r;
+      ['front', 'top', 'left'].forEach(function (k) {
+        var v = views[k];
+        if (cx > v.x + 2 && cx < v.x + v.w - 2 && cy > v.y + 2 && cy < v.y + v.h - 2) {
+          holes.push({
+            view: k,
+            cu: (cx - v.x) / pxPerMM,
+            cw: (cy - v.y) / pxPerMM,
+            r: r / pxPerMM
+          });
+        }
+      });
+    });
+
+    var T = Solid.generate({
+      bin: bin, W: ds.w, H: ds.h, views: views,
+      pxPerMM: pxPerMM, holes: holes
+    });
+    if (T.error) { alert(T.error); return false; }
+
+    S.teach = T;
+    S.pxPerMMUsed = pxPerMM;
+    S.steps = T.steps.map(function (s) {
+      return { title: s.title, note: s.note, strokes: [], len: 1, teach: true, kind: 'thick' };
+    });
+    S.totalLen = S.steps.length;
+    S.pos = 0;
+    S.lastCur = -1;
+    return true;
+  }
+
   function render() {
+    if (S.mode === 'teach' && S.teach) { renderTeach(); return; }
     var w = cv.clientWidth, h = cv.clientHeight;
     if (!w || !h) return;
     ctx.setTransform(S.dpr, 0, 0, S.dpr, 0, 0);
@@ -2173,7 +2780,7 @@ kbd {
     if (!S.playing) { S.raf = 0; return; }
     var dt = S.lastTs ? Math.min(0.06, (ts - S.lastTs) / 1000) : 0.016;
     S.lastTs = ts;
-    var v = 820 * S.speed;              // 每秒画多少像素（图纸坐标）
+    var v = S.mode === 'teach' ? (S.speed / 1.5) : (820 * S.speed);
     S.pos += v * dt;
     if (S.pos >= S.totalLen) { S.pos = S.totalLen; stop(); }
     syncCoach();
@@ -2204,6 +2811,11 @@ kbd {
   function jump(stepIndex) {
     if (!S.steps.length) return;
     stepIndex = Math.max(0, Math.min(S.steps.length - 1, stepIndex));
+    if (S.mode === 'teach') {
+      S.pos = stepIndex;
+      syncCoach(); syncScrub(); render();
+      return;
+    }
     var acc = 0;
     for (var i = 0; i < stepIndex; i++) acc += S.steps[i].len;
     S.pos = acc;
@@ -2297,6 +2909,7 @@ kbd {
       badge.style.background = info.color + '18';
       badge.textContent = info.short;
       badge.title = '点击切换线型';
+      if (st.teach) badge.style.display = 'none';
       var name = document.createElement('span');
       name.className = 'name';
       name.textContent = st.title;
@@ -2432,6 +3045,25 @@ kbd {
         return;
       }
       S.plan = plan;
+
+      if (S.mode === 'teach' && S.views) {
+        if (buildTeach(data, plan)) {
+          $('empty-hint').hidden = true;
+          updateTeachStats(performance.now() - t0);
+          renderSteps();
+          render();
+          busy(false);
+          var at0 = /[?&]at=([\d.]+)/.exec(location.search);
+          if (at0) {
+            S.pos = S.totalLen * Math.max(0, Math.min(0.999, parseFloat(at0[1])));
+            syncCoach(); render();
+          }
+          if (location.search.indexOf('selftest') >= 0) selftestTeach();
+          return;
+        }
+      }
+
+      S.teach = null;
       S.steps = plan.steps.map(function (s) {
         return {
           kind: s.kind, title: s.title, note: s.note,
@@ -2451,6 +3083,46 @@ kbd {
       if (at) { S.pos = S.totalLen * Math.max(0, Math.min(1, parseFloat(at[1]))); syncCoach(); render(); }
       if (location.search.indexOf('selftest') >= 0) selftestDump(plan);
     }, 50);
+  }
+
+  function updateTeachStats(ms) {
+    var T = S.teach;
+    var mm = S.pxPerMMUsed || 0;
+    $('stats').innerHTML =
+      '<div class="stat"><b>' + T.boxes.length + '</b><span>形体</span></div>' +
+      '<div class="stat"><b>' + T.steps.length + '</b><span>步骤</span></div>' +
+      '<div class="stat"><b>' + Math.round(ms) + '</b><span>毫秒</span></div>';
+
+    var volTxt = mm ? (T.volume + ' 单位³') : (T.volume + '');
+    $('legend').innerHTML =
+      '<div class="lg"><i style="background:#1b1b1b"></i>实体体积<b>' + volTxt + '</b></div>' +
+      '<div class="lg"><i style="background:#d4553a"></i>比例<b>' + mm.toFixed(1) + ' px/mm</b></div>' +
+      '<div class="lg"><i style="background:#2f7dd1"></i>不可见轮廓<b>' +
+      T.steps.filter(function (s) { return /虚线|投到|投影/.test(s.title); }).length + ' 步</b></div>';
+  }
+
+  function selftestTeach() {
+    var T = S.teach;
+    var out = {
+      ok: true,
+      errors: window.__ERRORS || [],
+      mode: 'teach',
+      boxes: T.boxes.length,
+      dims: [T.W, T.D, T.H],
+      volume: T.volume,
+      holes: {
+        front: T.holes.front.map(function (h) { return [Math.round(h.u0), Math.round(h.u1), Math.round(h.w0), Math.round(h.w1)]; }),
+        top: T.holes.top.map(function (h) { return [Math.round(h.u0), Math.round(h.u1), Math.round(h.w0), Math.round(h.w1)]; }),
+        left: T.holes.left.length
+      },
+      boxList: T.boxes.slice(0, 6).map(function (b) { return [b.x0, b.x1, b.y0, b.y1, b.z0, b.z1]; }),
+      pxPerMM: +(S.pxPerMMUsed || 0).toFixed(2),
+      steps: T.steps.map(function (s) { return { title: s.title, n: s.shapes.length, g: (s.guides || []).length }; })
+    };
+    var el = $('selftest-output');
+    el.hidden = false;
+    el.textContent = 'SELFTEST_JSON:' + JSON.stringify(out);
+    document.title = 'SELFTEST_DONE';
   }
 
   function updateStats(ms, plan) {
@@ -2515,11 +3187,45 @@ kbd {
     var img = new Image();
     img.onload = function () {
       setSource(img);
+      S.views = null;
+      S.teach = null;
+      S.pxPerMM = 0;
       URL.revokeObjectURL(url);
-      run();
+      if (S.mode === 'teach') startWizard();
+      else run();
     };
     img.onerror = function () { URL.revokeObjectURL(url); alert('这张图读不了，换一张试试'); };
     img.src = url;
+  }
+
+  var VIEW_LABEL = { front: '主视图', top: '俯视图', left: '左视图' };
+
+  function startWizard() {
+    S.views = {};
+    S.wizard = { idx: 0, order: ['front', 'top', 'left'] };
+    S.teach = null;
+    S.ignoring = false;
+    $('ignore-tip').hidden = false;
+    $('ignore-tip').textContent = '第 1 个框：拖出【主视图】的区域';
+    cv.classList.add('crosshair');
+    $('empty-hint').hidden = true;
+    render();
+  }
+
+  function wizardLabel() {
+    var w = S.wizard;
+    var n = w.idx + 1;
+    $('ignore-tip').textContent = '第 ' + n + ' 个框：拖出【' + VIEW_LABEL[w.order[w.idx]] + '】的区域';
+  }
+
+  function setMode(m) {
+    S.mode = m;
+    $('m-teach').classList.toggle('primary', m === 'teach');
+    $('m-trace').classList.toggle('primary', m === 'trace');
+    $('btn-views').style.display = m === 'teach' ? '' : 'none';
+    if (!S.img) return;
+    if (m === 'teach' && !S.views) startWizard();
+    else run();
   }
 
   function useDemo() {
@@ -2528,6 +3234,13 @@ kbd {
     c.height = Demo.height;
     Demo.draw(c.getContext('2d'));
     setSource(c);
+    // 示例图三个视图的位置（这张图是我画的，坐标已知）
+    S.views = {
+      front: { x: 210, y: 210, w: 700, h: 364 },
+      top: { x: 210, y: 700, w: 700, h: 420 },
+      left: { x: 1085, y: 210, w: 420, h: 364 }
+    };
+    S.pxPerMM = 7;
     run();
   }
 
@@ -2624,6 +3337,14 @@ kbd {
     });
     $('drawer-mask').addEventListener('click', function () { drawer(false); });
 
+    $('m-teach').addEventListener('click', function () { setMode('teach'); });
+    $('m-trace').addEventListener('click', function () { setMode('trace'); });
+    $('btn-views').addEventListener('click', function () { if (S.img) startWizard(); });
+    $('opt-ppm').addEventListener('change', function (e) {
+      S.pxPerMM = Math.max(0, +e.target.value || 0);
+      if (S.img && S.views) run();
+    });
+
     $('btn-import').addEventListener('click', function () { $('file-input').click(); });
     $('file-input').addEventListener('change', function (e) {
       if (e.target.files && e.target.files[0]) loadFile(e.target.files[0]);
@@ -2685,7 +3406,8 @@ kbd {
       return { x: (x - S.view.ox) / S.view.s, y: (y - S.view.oy) / S.view.s };
     };
     cv.addEventListener('pointerdown', function (ev) {
-      if (!S.ignoring || !S.img) return;
+      if (!S.img) return;
+      if (!S.wizard && !S.ignoring) return;
       cv.setPointerCapture(ev.pointerId);
       var p = toImg(ev);
       S.dragRect = { x: p.x, y: p.y, w: 0, h: 0 };
@@ -2693,10 +3415,10 @@ kbd {
     });
     cv.addEventListener('pointermove', function (ev) {
       if (!S.dragRect) return;
-      var p = toImg(ev), s = S._dragStart;
+      var p = toImg(ev), s0 = S._dragStart;
       S.dragRect = {
-        x: Math.min(s.x, p.x), y: Math.min(s.y, p.y),
-        w: Math.abs(p.x - s.x), h: Math.abs(p.y - s.y)
+        x: Math.min(s0.x, p.x), y: Math.min(s0.y, p.y),
+        w: Math.abs(p.x - s0.x), h: Math.abs(p.y - s0.y)
       };
       render();
     });
@@ -2704,11 +3426,28 @@ kbd {
       if (!S.dragRect) return;
       var r = S.dragRect;
       S.dragRect = null;
-      if (r.w > 6 && r.h > 6) {
+      if (r.w > 12 && r.h > 12) {
         var sc = S.plan ? S.plan.scale : 1;
-        // 存的是源图坐标：画布坐标除以缩放
-        S.ignoreRects.push({ x: r.x / sc, y: r.y / sc, w: r.w / sc, h: r.h / sc });
-        if (S.img) run();
+        if (S.wizard) {
+          var wz = S.wizard;
+          S.views[wz.order[wz.idx]] = { x: r.x / sc, y: r.y / sc, w: r.w / sc, h: r.h / sc };
+          wz.idx++;
+          if (wz.idx >= 3) {
+            S.wizard = null;
+            $('ignore-tip').hidden = true;
+            cv.classList.remove('crosshair');
+            S.plan = null;
+            run();
+            return;
+          }
+          wizardLabel();
+          render();
+          return;
+        }
+        if (S.ignoring) {
+          S.ignoreRects.push({ x: r.x / sc, y: r.y / sc, w: r.w / sc, h: r.h / sc });
+          if (S.img) run();
+        }
       }
       render();
     });
