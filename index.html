@@ -2049,7 +2049,7 @@ kbd {
       var sf = [], sf2 = [];
       fH.forEach(function (h) {
         var cu = (h.u0 + h.u1) / 2, cw = (h.w0 + h.w1) / 2;
-        var r = (Math.min(h.u1 - h.u0, h.w1 - h.w0) + 1.7) / 2;   // +补偿：空腔比孔径小约 1.7mm
+        var r = (Math.min(h.u1 - h.u0, h.w1 - h.w0) + 1.0) / 2;   // +补偿：空腔比孔径小约 1mm
         var hb = hostBox(cu, cw);
         var y0 = hb ? hb.y0 : 0, y1 = hb ? hb.y1 + 1 : D;
         sf.push({ view: 'front', t: 'circle', cu: cu, cw: cw, r: r });
@@ -2067,7 +2067,7 @@ kbd {
       var st1 = [], st2 = [];
       tH.forEach(function (h) {
         var cu = (h.u0 + h.u1) / 2, cw = (h.w0 + h.w1) / 2;
-        var r = (Math.min(h.u1 - h.u0, h.w1 - h.w0) + 1.7) / 2;   // +补偿：空腔比孔径小约 1.7mm
+        var r = (Math.min(h.u1 - h.u0, h.w1 - h.w0) + 1.0) / 2;   // +补偿：空腔比孔径小约 1mm
         // 孔所在形体的 z 范围：立板还是底板，靠空洞中心判断
         var host = null;
         for (var bi2 = 0; bi2 < boxes.length; bi2++) {
@@ -2131,12 +2131,12 @@ kbd {
     fH.forEach(function (h) {
       var cw = (h.w0 + h.w1) / 2;
       out.push({ view: 'front', t: 'dimV', w0: 0, w1: cw, at: W + 12, src: 0, text: String(Math.round(cw)) });
-      out.push({ view: 'front', t: 'leader', u0: (h.u0 + h.u1) / 2, w0: (h.w0 + h.w1) / 2, u1: (h.u1 + h.u1) / 2 + 14, w1: (h.w0 + h.w1) / 2 - 12, text: '\u2300' + Math.round(h.u1 - h.u0 + 1.7) });
+      out.push({ view: 'front', t: 'leader', u0: (h.u0 + h.u1) / 2, w0: (h.w0 + h.w1) / 2, u1: (h.u1 + h.u1) / 2 + 14, w1: (h.w0 + h.w1) / 2 - 12, text: '\u2300' + Math.round(h.u1 - h.u0 + 1.0) });
     });
     tH.forEach(function (h) {
       var cu = (h.u0 + h.u1) / 2;
       out.push({ view: 'top', t: 'dimH', u0: 0, u1: cu, at: D + 12, src: 0, text: String(Math.round(cu)) });
-      out.push({ view: 'top', t: 'leader', u0: cu, w0: (h.w0 + h.w1) / 2, u1: cu + 16, w1: (h.w0 + h.w1) / 2 + 12, text: '\u2300' + Math.round(h.u1 - h.u0 + 1.7) });
+      out.push({ view: 'top', t: 'leader', u0: cu, w0: (h.w0 + h.w1) / 2, u1: cu + 16, w1: (h.w0 + h.w1) / 2 + 12, text: '\u2300' + Math.round(h.u1 - h.u0 + 1.0) });
     });
 
     // 两孔的中心距
