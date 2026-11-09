@@ -1,0 +1,2803 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>机械制图 · 分步绘图教练</title>
+<style>
+/* 机械制图 · 分步绘图教练 */
+:root {
+  --bg: #14161a;
+  --panel: #1b1e24;
+  --panel2: #20242b;
+  --line: #2b3038;
+  --text: #e9ebee;
+  --muted: #8c939d;
+  --dim: #666d78;
+  --accent: #d4553a;
+  --accent2: #e8745a;
+  --paper: #fbfaf6;
+  --ok: #4a9d6a;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.5 "Microsoft YaHei", "PingFang SC", "Segoe UI", system-ui, sans-serif;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  display: grid;
+  grid-template-rows: 56px 1fr 66px;
+  height: 100vh;
+}
+
+/* ---------------- header ---------------- */
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand .mark {
+  width: 18px; height: 18px; border-radius: 3px;
+  background: linear-gradient(135deg, var(--accent), #7a2f1f);
+  box-shadow: inset 0 0 0 3px #1b1e24, 0 0 0 1px #3a2a26;
+  position: relative;
+}
+.brand .mark::after {
+  content: ''; position: absolute; inset: 5px;
+  border: 1.5px solid #fff6f2; border-radius: 1px;
+  border-right-color: transparent; border-bottom-color: transparent;
+}
+.brand .t1 { font-size: 16px; font-weight: 700; letter-spacing: .05em; }
+.brand .t2 { font-size: 13px; color: var(--muted); letter-spacing: .14em; margin-left: 2px; }
+
+.hdr-actions { display: flex; gap: 8px; }
+
+/* ---------------- buttons ---------------- */
+.btn {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: var(--panel2);
+  color: var(--text);
+  padding: 7px 14px;
+  border-radius: 7px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: .15s;
+  white-space: nowrap;
+}
+.btn:hover { background: #272c34; border-color: #39404a; }
+.btn:active { transform: translateY(1px); }
+.btn.primary {
+  background: var(--accent); border-color: var(--accent); color: #fff;
+  font-weight: 600;
+}
+.btn.primary:hover { background: var(--accent2); border-color: var(--accent2); }
+.btn.ghost { background: transparent; }
+.btn.block { width: 100%; }
+.btn:disabled { opacity: .4; cursor: default; }
+.btn.icon { padding: 7px 12px; font-size: 12px; }
+
+/* ---------------- layout ---------------- */
+main {
+  display: grid;
+  grid-template-columns: 268px minmax(0, 1fr) 352px;
+  min-height: 0;
+}
+
+aside { background: var(--panel); overflow-y: auto; min-height: 0; }
+#panel-left { border-right: 1px solid var(--line); display: flex; flex-direction: column; }
+#panel-right { border-left: 1px solid var(--line); display: flex; flex-direction: column; overflow: hidden; }
+
+.pane { padding: 14px 16px; border-bottom: 1px solid var(--line); }
+.pane.grow { flex: 1; border-bottom: none; }
+.pane-title {
+  font-size: 11px; letter-spacing: .16em; color: var(--dim);
+  margin-bottom: 12px; text-transform: uppercase;
+}
+
+/* fields */
+.field { display: block; margin-bottom: 13px; }
+.field > span {
+  display: block; font-size: 12.5px; color: var(--muted);
+  margin-bottom: 6px;
+}
+.field > span b { color: var(--text); font-weight: 600; }
+.field select, .mini select {
+  width: 100%; background: var(--panel2); color: var(--text);
+  border: 1px solid var(--line); border-radius: 6px;
+  padding: 6px 8px; font: inherit; font-size: 12.5px;
+  outline: none; cursor: pointer;
+}
+.field select:focus, .mini select:focus { border-color: #4a5260; }
+
+input[type=range] {
+  width: 100%; appearance: none; height: 4px; border-radius: 2px;
+  background: #303641; outline: none; margin: 4px 0;
+}
+input[type=range]::-webkit-slider-thumb {
+  appearance: none; width: 14px; height: 14px; border-radius: 50%;
+  background: var(--accent); cursor: pointer; border: 2px solid #1b1e24;
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.check { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); margin: 4px 0 14px; cursor: pointer; }
+.check input { accent-color: var(--accent); }
+
+.row2 { display: flex; gap: 8px; margin-top: 8px; }
+.row2 .btn { flex: 1; }
+
+/* stats */
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+.stat { background: var(--panel2); border-radius: 7px; padding: 8px 6px; text-align: center; }
+.stat b { display: block; font-size: 17px; font-weight: 700; line-height: 1.2; }
+.stat span { font-size: 11px; color: var(--dim); }
+
+.legend { display: flex; flex-direction: column; gap: 5px; }
+.lg { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.lg i { width: 16px; height: 3px; border-radius: 2px; display: inline-block; }
+.lg b { color: var(--text); font-weight: 600; margin-left: auto; }
+
+/* motto */
+.motto { margin: 0; padding-left: 0; list-style: none; counter-reset: m; }
+.motto li {
+  position: relative; padding-left: 26px; margin-bottom: 9px;
+  font-size: 12px; color: var(--muted); line-height: 1.55;
+  counter-increment: m;
+}
+.motto li::before {
+  content: counter(m);
+  position: absolute; left: 0; top: 1px;
+  width: 17px; height: 17px; border-radius: 50%;
+  background: #2a2f38; color: var(--muted);
+  font-size: 10.5px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+}
+.motto li b { color: var(--text); font-weight: 600; margin-right: 4px; }
+
+/* ---------------- stage ---------------- */
+#stage { position: relative; background: #0f1114; overflow: hidden; }
+#cv { display: block; width: 100%; height: 100%; cursor: default; }
+#cv.crosshair { cursor: crosshair; }
+
+#empty-hint {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  pointer-events: none;
+}
+.eh-inner { text-align: center; color: var(--muted); }
+.eh-icon {
+  font-size: 44px; color: #333a44; margin-bottom: 10px;
+  transform: rotate(-8deg);
+}
+.eh-title { font-size: 19px; color: #b9bec7; font-weight: 600; margin-bottom: 8px; }
+.eh-sub { font-size: 12.5px; line-height: 1.9; }
+.eh-sub.dim { color: var(--dim); margin-top: 6px; }
+kbd {
+  background: #242931; border: 1px solid #333a44; border-bottom-width: 2px;
+  border-radius: 4px; padding: 1px 5px; font-size: 11px; font-family: inherit;
+}
+
+#busy {
+  position: absolute; inset: 0; background: rgba(15, 17, 20, .82);
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+  font-size: 13px; color: var(--muted); z-index: 20;
+  backdrop-filter: blur(2px);
+}
+.spin {
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 2px solid #3a414d; border-top-color: var(--accent);
+  animation: sp .7s linear infinite;
+}
+@keyframes sp { to { transform: rotate(360deg); } }
+
+#coach {
+  position: absolute; left: 18px; top: 18px; max-width: 380px;
+  background: rgba(24, 27, 32, .94);
+  border: 1px solid #333a44; border-left: 3px solid var(--accent);
+  border-radius: 9px; padding: 12px 15px 13px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, .45);
+  animation: fade .25s ease;
+}
+@keyframes fade { from { opacity: 0; transform: translateY(-4px); } }
+.coach-idx { font-size: 11px; color: var(--accent2); letter-spacing: .1em; margin-bottom: 4px; }
+.coach-title { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+.coach-note { font-size: 12.5px; color: var(--muted); line-height: 1.65; }
+
+#ignore-tip {
+  position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%);
+  background: var(--accent); color: #fff; font-size: 12.5px;
+  padding: 7px 16px; border-radius: 20px; box-shadow: 0 4px 16px rgba(0,0,0,.4);
+}
+
+/* ---------------- steps ---------------- */
+.pane-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px 10px; font-size: 11px; letter-spacing: .16em;
+  color: var(--dim); text-transform: uppercase;
+  border-bottom: 1px solid var(--line);
+}
+.pane-head .count { color: var(--muted); letter-spacing: 0; font-size: 12px; }
+
+.steps {
+  list-style: none; margin: 0; padding: 8px 10px 20px;
+  overflow-y: auto; flex: 1;
+}
+.steps-empty {
+  padding: 40px 24px; text-align: center; font-size: 13px; color: var(--muted);
+  line-height: 2;
+}
+.steps-empty .dim { color: var(--dim); font-size: 12px; }
+
+.step {
+  display: grid; grid-template-columns: 26px 1fr; gap: 8px;
+  padding: 9px 8px; border-radius: 8px; cursor: pointer;
+  border: 1px solid transparent; margin-bottom: 2px;
+  transition: background .12s;
+}
+.step:hover { background: #22262d; }
+.step.on { background: #2a2119; border-color: #4a3226; }
+.step.done .n { background: #2f4a3a; color: #9fd8b4; }
+
+.step .n {
+  width: 22px; height: 22px; border-radius: 50%;
+  background: #2b3038; color: var(--muted);
+  font-size: 11px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  margin-top: 1px;
+}
+.step.on .n { background: var(--accent); color: #fff; }
+
+.step .body { min-width: 0; }
+.step .ttl { display: flex; align-items: center; gap: 6px; }
+.step .badge {
+  font-size: 10.5px; padding: 1px 6px; border-radius: 4px;
+  border: 1px solid; line-height: 1.5; font-weight: 600;
+  white-space: nowrap; flex: none;
+}
+.step .name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.step .note {
+  font-size: 11.5px; color: var(--dim); line-height: 1.55; margin-top: 3px;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.step.on .note { color: #b09383; }
+.step .ops { display: none; gap: 4px; margin-top: 5px; }
+.step:hover .ops, .step.on .ops { display: flex; }
+.step .ops button {
+  background: #2b3038; border: none; color: var(--muted);
+  width: 22px; height: 20px; border-radius: 4px; cursor: pointer;
+  font-size: 11px; line-height: 1;
+}
+.step .ops button:hover { background: #39404a; color: var(--text); }
+.step .ops button.del:hover { background: #6b2c22; color: #ffd9d0; }
+
+/* ---------------- player ---------------- */
+#player {
+  display: flex; align-items: center; gap: 16px; padding: 0 18px;
+  background: var(--panel); border-top: 1px solid var(--line);
+}
+.pgroup { display: flex; align-items: center; gap: 8px; }
+.pgroup.right { margin-left: auto; }
+.btn.play { min-width: 92px; }
+#scrub { flex: 1; max-width: none; }
+.pmeta {
+  font-size: 12px; color: var(--muted); white-space: nowrap;
+  min-width: 120px; text-align: right;
+}
+.mini { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--dim); }
+.mini select { width: auto; padding: 5px 6px; }
+
+/* ---------------- modal ---------------- */
+.modal {
+  position: fixed; inset: 0; background: rgba(8, 9, 11, .72);
+  display: flex; align-items: center; justify-content: center; z-index: 100;
+  backdrop-filter: blur(3px);
+}
+.modal-box {
+  width: 620px; max-width: calc(100vw - 40px); max-height: 82vh; overflow-y: auto;
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 14px; padding: 24px 28px 22px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, .6);
+}
+.modal-head { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
+.modal-body ol { padding-left: 20px; margin: 0 0 16px; }
+.modal-body li { margin-bottom: 9px; font-size: 13px; color: #c3c8d0; line-height: 1.65; }
+.modal-body li b { color: #fff; }
+.tip {
+  background: #22262d; border-left: 3px solid var(--accent);
+  padding: 10px 14px; border-radius: 0 7px 7px 0;
+  font-size: 12.5px; color: var(--muted); line-height: 1.7; margin-bottom: 10px;
+}
+.tip b { color: var(--text); }
+#btn-help-close { margin-top: 8px; }
+
+/* scrollbar */
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #2e343d; border-radius: 5px; }
+::-webkit-scrollbar-thumb:hover { background: #3b424d; }
+
+@media (max-width: 1180px) {
+  main { grid-template-columns: 232px minmax(0, 1fr) 300px; }
+}
+
+/* ---------------- 手机 / 窄屏 ---------------- */
+#btn-settings, #drawer-mask { display: none; }
+
+@media (max-width: 860px) {
+  #app { grid-template-rows: 50px 1fr 58px; }
+
+  header { padding: 0 12px; }
+  .brand .t2 { display: none; }
+  .brand .t1 { font-size: 15px; }
+  .hdr-actions .btn { padding: 5px 9px; font-size: 12px; }
+  #btn-help { display: none; }
+
+  #btn-settings {
+    display: inline-block;
+    padding: 5px 9px; font-size: 12px;
+  }
+
+  main {
+    display: block;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* 画布占上半，步骤列表在下半 */
+  #stage {
+    height: 52%;
+    border-bottom: 1px solid var(--line);
+  }
+
+  #panel-right {
+    height: 48%;
+    border-left: none;
+    overflow-y: auto;
+  }
+  .pane-head { padding: 9px 14px 7px; }
+  .steps { padding: 4px 8px 16px; }
+  .step { padding: 7px 6px; }
+  .step .note { -webkit-line-clamp: 2; }
+
+  /* 左栏变抽屉 */
+  #panel-left {
+    position: fixed;
+    left: 0; top: 0; bottom: 0;
+    width: 276px;
+    z-index: 60;
+    transform: translateX(-104%);
+    transition: transform .22s ease;
+    box-shadow: 6px 0 28px rgba(0, 0, 0, .5);
+  }
+  #panel-left.open { transform: none; }
+
+  #drawer-mask {
+    display: block;
+    position: fixed; inset: 0; z-index: 55;
+    background: rgba(6, 8, 10, .55);
+    opacity: 0; pointer-events: none;
+    transition: opacity .22s;
+  }
+  #drawer-mask.on { opacity: 1; pointer-events: auto; }
+
+  /* 手机上隐藏悬浮提示卡：下面的步骤列表已经把标题和要点都显示了 */
+  #coach { display: none; }
+
+  #empty-hint .eh-title { font-size: 16px; }
+  #empty-hint .eh-sub { font-size: 11.5px; }
+  .eh-icon { font-size: 34px; }
+
+  /* 播放条精简 */
+  #player { gap: 8px; padding: 0 10px; }
+  .pmeta { display: none; }
+  .mini { display: none; }
+  .pgroup .btn { padding: 6px 10px; font-size: 12px; }
+  .btn.play { min-width: 70px; }
+  #btn-export { padding: 6px 10px; font-size: 12px; }
+}
+
+/* 很窄的屏幕：logo 隐掉，把宽度全让给按钮 */
+@media (max-width: 560px) {
+  header { padding: 0 10px; }
+  .brand { display: none; }
+  .hdr-actions { gap: 5px; width: 100%; justify-content: flex-end; }
+  .hdr-actions .btn { padding: 6px 8px; font-size: 11.5px; }
+}
+
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="brand">
+      <span class="mark"></span>
+      <span class="t1">机械制图</span>
+      <span class="t2">分步绘图教练</span>
+    </div>
+    <div class="hdr-actions">
+      <button id="btn-settings" class="btn">⚙ 设置</button>
+      <button id="btn-import" class="btn primary">导入图纸</button>
+      <button id="btn-demo" class="btn">示例图纸</button>
+      <button id="btn-help" class="btn ghost">用法</button>
+      <input id="file-input" type="file" accept="image/*" hidden>
+    </div>
+  </header>
+
+  <div id="drawer-mask"></div>
+
+  <main>
+    <!-- ============ 左：参数 ============ -->
+    <aside id="panel-left">
+      <div class="pane">
+        <div class="pane-title">解析设置</div>
+
+        <label class="field">
+          <span>二值化</span>
+          <select id="opt-threshold">
+            <option value="auto">自动（自适应）</option>
+            <option value="manual">手动阈值</option>
+          </select>
+        </label>
+        <label class="field" id="thr-wrap" hidden>
+          <span>阈值 <b id="thr-val">140</b></span>
+          <input id="opt-threshold-val" type="range" min="40" max="240" value="140">
+        </label>
+
+        <label class="field">
+          <span>最小笔画 <b id="minlen-val">6</b> px</span>
+          <input id="opt-minlen" type="range" min="2" max="30" value="6">
+        </label>
+
+        <label class="field">
+          <span>断线合并 <b id="merge-val">4</b> px</span>
+          <input id="opt-merge" type="range" min="0" max="8" value="4">
+        </label>
+
+        <label class="field">
+          <span>处理精度</span>
+          <select id="opt-maxdim">
+            <option value="1200">快（1200px）</option>
+            <option value="1700" selected>标准（1700px）</option>
+            <option value="2400">精细（2400px）</option>
+          </select>
+        </label>
+
+        <label class="check">
+          <input id="opt-invert" type="checkbox">
+          <span>深底白线（反色）</span>
+        </label>
+
+        <div class="row2">
+          <button id="btn-run" class="btn primary block">生成步骤</button>
+        </div>
+        <div class="row2">
+          <button id="btn-ignore" class="btn block">框掉文字</button>
+          <button id="btn-clear-ignore" class="btn block">清除框选</button>
+        </div>
+      </div>
+
+      <div class="pane">
+        <div class="pane-title">识别结果</div>
+        <div id="stats" class="stats">
+          <div class="stat"><b>—</b><span>笔画</span></div>
+          <div class="stat"><b>—</b><span>步骤</span></div>
+          <div class="stat"><b>—</b><span>耗时</span></div>
+        </div>
+        <div id="legend" class="legend"></div>
+      </div>
+
+      <div class="pane grow">
+        <div class="pane-title">画图法定步骤</div>
+        <ol class="motto">
+          <li><b>定基准</b> 中心线、底面基准线，线端超轮廓 2~3 mm</li>
+          <li><b>画大形</b> 主要轮廓，先大后小，一笔画到底</li>
+          <li><b>补局部</b> 孔、槽、圆角、倒角、肋板</li>
+          <li><b>画虚线</b> 不可见轮廓，3~4 mm 线段、1 mm 间隔</li>
+          <li><b>剖面线</b> 45° 细实线，间距 2~4 mm</li>
+          <li><b>标尺寸</b> 界线 → 尺寸线 → 箭头 → 数字</li>
+          <li><b>检查加深</b> 粗实线 0.7 mm，细线 0.35 mm</li>
+        </ol>
+      </div>
+    </aside>
+
+    <!-- ============ 中：画布 ============ -->
+    <section id="stage">
+      <canvas id="cv"></canvas>
+
+      <div id="empty-hint">
+        <div class="eh-inner">
+          <div class="eh-icon">✎</div>
+          <div class="eh-title">把图纸拖进来</div>
+          <div class="eh-sub">支持 截图 / 扫描件 / 拍照 · 也可以直接 <kbd>Ctrl</kbd>+<kbd>V</kbd> 粘贴</div>
+          <div class="eh-sub dim">没有图？点右上角「示例图纸」先看看效果</div>
+        </div>
+      </div>
+
+      <div id="busy" hidden><span class="spin"></span><span id="busy-text">正在解析线条…</span></div>
+
+      <div id="coach" hidden>
+        <div class="coach-idx" id="coach-idx">第 1 步 / 共 12 步</div>
+        <div class="coach-title" id="coach-title">画基准中心线</div>
+        <div class="coach-note" id="coach-note"></div>
+      </div>
+
+      <div id="ignore-tip" hidden>拖拽框出要忽略的区域（文字、标题栏）</div>
+    </section>
+
+    <!-- ============ 右：步骤 ============ -->
+    <aside id="panel-right">
+      <div class="pane-head">
+        <span>绘图步骤</span>
+        <span id="step-count" class="count"></span>
+      </div>
+      <ol id="step-list" class="steps"></ol>
+      <div id="step-empty" class="steps-empty">
+        导入图纸 → 点「生成步骤」<br>
+        <span class="dim">程序会把图拆成一条条笔画，<br>按制图规矩排好先后顺序</span>
+      </div>
+    </aside>
+  </main>
+
+  <!-- ============ 底：播放器 ============ -->
+  <footer id="player">
+    <div class="pgroup">
+      <button id="btn-prev" class="btn icon" title="上一步 (←)">◀</button>
+      <button id="btn-play" class="btn play" title="播放 / 暂停 (空格)">▶ 播放</button>
+      <button id="btn-next" class="btn icon" title="下一步 (→)">▶❙</button>
+    </div>
+    <input id="scrub" type="range" min="0" max="1000" value="0">
+    <div class="pmeta" id="step-label">未生成</div>
+    <div class="pgroup right">
+      <label class="mini">速度
+        <select id="opt-speed">
+          <option value="0.5">0.5×</option>
+          <option value="1" selected>1×</option>
+          <option value="2">2×</option>
+          <option value="4">4×</option>
+        </select>
+      </label>
+      <label class="mini">底图
+        <select id="opt-ghost">
+          <option value="faint" selected>淡显</option>
+          <option value="strong">对照</option>
+          <option value="none">隐藏</option>
+        </select>
+      </label>
+      <button id="btn-export" class="btn">导出 PNG</button>
+    </div>
+  </footer>
+</div>
+
+<!-- 帮助 -->
+<div id="help" class="modal" hidden>
+  <div class="modal-box">
+    <div class="modal-head">怎么用</div>
+    <div class="modal-body">
+      <ol>
+        <li><b>导入</b>：把一张画好的工程图拖进来（截图最准，拍照次之）。</li>
+        <li><b>框掉文字</b>：点「框掉文字」，在画布上把尺寸数字、标题栏、技术要求框起来，免得它们被当成线条。</li>
+        <li><b>生成步骤</b>：程序把图还原成一条条笔画，再按「基准 → 轮廓 → 圆 → 虚线 → 尺寸」排成步骤。</li>
+        <li><b>播放</b>：空格播放 / 暂停，←→ 单步。粗红的是当前这一步正在画的线。</li>
+        <li><b>改顺序</b>：右边步骤可以 ↑↓ 调顺序、⇤ 并入上一步、✕ 删除；双击标题或要点直接改字；点线型徽章换线型。顺序改了，动画跟着变。</li>
+      </ol>
+      <div class="tip">
+        <b>建议：一次只喂一个视图。</b>整张 A4 图也能解析，但框选一个视图（比如只框俯视图）出来的步骤会干净得多。
+      </div>
+      <div class="tip">
+        <b>识别不准怎么办：</b>先调「二值化」——扫描件用自动，翻拍发灰的手动把阈值调高；线条断断续续就把「断线合并」调大。
+      </div>
+    </div>
+    <button id="btn-help-close" class="btn primary">知道了</button>
+  </div>
+</div>
+
+<pre id="selftest-output" hidden></pre>
+
+<script>
+/*!
+ * 机械制图分步教练 · engine.js
+ * 把一张位图工程图还原成矢量笔画，再按制图规范排出绘图步骤。
+ *
+ * 流水线：灰度 → 二值 → 距离变换(线宽) → 骨架细化 → 骨架追踪 → RDP 简化
+ *        → 共线合并(虚线/点划线识别) → 分类 → 连通块 → 排步骤
+ *
+ * 不依赖任何第三方库，可在浏览器 / Node 里跑。
+ */
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory();
+  else root.Engine = factory();
+})(typeof self !== 'undefined' ? self : this, function () {
+  'use strict';
+
+  /* =====================================================================
+   * 0. 常量 & 小工具
+   * ===================================================================== */
+
+  var DEFAULTS = {
+    maxDim: 1700,        // 处理时最长边的像素上限（超过就缩小，提速）
+    adaptive: true,      // 自适应阈值（照片/光照不均更稳），false 则用 Otsu
+    threshold: null,     // 数值 = 手动阈值（0~255），null = 自动
+    invert: false,       // 深底白线时打开
+    minLen: 6,           // 短于这个长度的笔画当噪点丢掉（像素）
+    mergeTol: 4,         // 端点靠这么近就接起来（修复抗锯齿断口）
+    maxGap: 32,          // 共线合并时允许的最大间隙（虚线/点划线）
+    rdpEps: 1.15         // 折线简化容差
+  };
+
+  var KIND = {
+    center: { key: 'center', label: '基准中心线', short: '中心线', color: '#7a63d6', w: 1.0 },
+    thick: { key: 'thick', label: '可见轮廓', short: '粗实线', color: '#232323', w: 2.6 },
+    circle: { key: 'circle', label: '圆 / 圆弧', short: '圆', color: '#232323', w: 2.6 },
+    thin: { key: 'thin', label: '细实线', short: '细实线', color: '#9a9a9a', w: 1.1 },
+    hidden: { key: 'hidden', label: '不可见轮廓', short: '虚线', color: '#2f7dd1', w: 1.5 },
+    other: { key: 'other', label: '其他线条', short: '其他', color: '#b98a5e', w: 1.4 }
+  };
+
+  // 机械制图推荐的画图先后（GB/T 4457 一类教材的通行顺序）
+  var ORDER = ['center', 'thick', 'circle', 'hidden', 'thin', 'other'];
+
+  var NOTE = {
+    center: '细点划线。先画它定圆心和对称基准，线端超出轮廓 2~3 mm；后面所有尺寸都从这条线量起。',
+    thick: '粗实线（约 0.7 mm）。先定大形，一笔画到底，不要来回描；线与线相交处自然相接。',
+    circle: '粗实线圆。圆心由中心线交点确定，圆规一次画成；不要用描的办法修圆。',
+    thin: '细实线（约 0.35 mm）。尺寸界线、剖面线、过渡线、螺纹牙底线用它；长为粗实线的 1/2。',
+    hidden: '虚线。线段 3~4 mm、间隔约 1 mm；与粗实线相接时留出 1 mm 空隙。',
+    other: '补齐剩余线条。'
+  };
+
+  // 一维 Otsu：在宽度分布上找最佳二分点。
+  // 比 k-means 稳，因为线宽是严重偏态的（细线很多、粗线很少），
+  // k-means 会被数量多的那一类拽偏，把粗线并进细线里。
+  function otsuSplit(vals) {
+    if (!vals.length) return 0;
+    var maxV = 0, i;
+    for (i = 0; i < vals.length; i++) if (vals[i] > maxV) maxV = vals[i];
+    var nb = Math.max(8, Math.ceil(maxV * 2) + 2);
+    var hist = new Float64Array(nb);
+    for (i = 0; i < vals.length; i++) hist[Math.min(nb - 1, Math.round(vals[i] * 2))]++;
+    var total = vals.length, sum = 0;
+    for (i = 0; i < nb; i++) sum += i * hist[i];
+    var sB = 0, wB = 0, best = 0, bestVar = -1;
+    for (i = 0; i < nb; i++) {
+      wB += hist[i];
+      if (!wB) continue;
+      var wF = total - wB;
+      if (!wF) break;
+      sB += i * hist[i];
+      var mB = sB / wB, mF = (sum - sB) / wF;
+      var v = wB * wF * (mB - mF) * (mB - mF);
+      if (v > bestVar) { bestVar = v; best = i; }
+    }
+    return (best + 0.5) / 2;
+  }
+
+  function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+  function dist2(a, b) { var dx = a[0] - b[0], dy = a[1] - b[1]; return dx * dx + dy * dy; }
+  function mean(a) { if (!a.length) return 0; var s = 0; for (var i = 0; i < a.length; i++) s += a[i]; return s / a.length; }
+  function median(a) {
+    if (!a.length) return 0;
+    var b = Array.prototype.slice.call(a).sort(function (x, y) { return x - y; });
+    var m = b.length >> 1;
+    return b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2;
+  }
+  // 一维 2 均值聚类，用来把线宽分成 粗 / 细 两档
+  function kmeans2(vals) {
+    if (!vals.length) return [0, 0];
+    var lo = Infinity, hi = -Infinity;
+    for (var i = 0; i < vals.length; i++) { if (vals[i] < lo) lo = vals[i]; if (vals[i] > hi) hi = vals[i]; }
+    if (hi - lo < 0.5) return [lo, hi];
+    var c0 = lo, c1 = hi;
+    for (var it = 0; it < 15; it++) {
+      var mid = (c0 + c1) / 2, s0 = 0, n0 = 0, s1 = 0, n1 = 0;
+      for (var k = 0; k < vals.length; k++) {
+        if (vals[k] <= mid) { s0 += vals[k]; n0++; } else { s1 += vals[k]; n1++; }
+      }
+      if (!n0 || !n1) break;
+      c0 = s0 / n0; c1 = s1 / n1;
+    }
+    return [c0, c1];
+  }
+
+  /* =====================================================================
+   * 1. 图像：灰度 / 缩放 / 二值化
+   * ===================================================================== */
+
+  function toGray(data, w, h, ch) {
+    ch = ch || 4;
+    var n = w * h, g = new Uint8Array(n), i, j;
+    if (ch === 1) { for (i = 0; i < n; i++) g[i] = data[i]; return g; }
+    if (ch === 3) {
+      for (i = 0, j = 0; i < n; i++, j += 3) g[i] = (data[j] * 0.299 + data[j + 1] * 0.587 + data[j + 2] * 0.114) | 0;
+      return g;
+    }
+    for (i = 0, j = 0; i < n; i++, j += 4) g[i] = (data[j] * 0.299 + data[j + 1] * 0.587 + data[j + 2] * 0.114) | 0;
+    return g;
+  }
+
+  // 缩小用 min-pooling：细线缩小后不会变淡消失
+  function downscaleGray(gray, w, h, maxDim) {
+    var s = Math.min(1, maxDim / Math.max(w, h));
+    if (s >= 0.999) return { gray: gray, w: w, h: h, scale: 1 };
+    var nw = Math.max(8, Math.round(w * s)), nh = Math.max(8, Math.round(h * s));
+    var out = new Uint8Array(nw * nh), xr = w / nw, yr = h / nh;
+    for (var y = 0; y < nh; y++) {
+      var y0 = Math.floor(y * yr), y1 = Math.min(h, Math.max(y0 + 1, Math.ceil((y + 1) * yr)));
+      for (var x = 0; x < nw; x++) {
+        var x0 = Math.floor(x * xr), x1 = Math.min(w, Math.max(x0 + 1, Math.ceil((x + 1) * xr)));
+        var m = 255;
+        for (var yy = y0; yy < y1; yy++) {
+          var row = yy * w;
+          for (var xx = x0; xx < x1; xx++) { var v = gray[row + xx]; if (v < m) m = v; }
+        }
+        out[y * nw + x] = m;
+      }
+    }
+    return { gray: out, w: nw, h: nh, scale: s };
+  }
+
+  function otsu(gray) {
+    var hist = new Uint32Array(256), i;
+    for (i = 0; i < gray.length; i++) hist[gray[i]]++;
+    var total = gray.length, sum = 0;
+    for (i = 0; i < 256; i++) sum += i * hist[i];
+    var sumB = 0, wB = 0, best = 0, bestVar = -1;
+    for (i = 0; i < 256; i++) {
+      wB += hist[i];
+      if (!wB) continue;
+      var wF = total - wB;
+      if (!wF) break;
+      sumB += i * hist[i];
+      var mB = sumB / wB, mF = (sum - sumB) / wF;
+      var v = wB * wF * (mB - mF) * (mB - mF);
+      if (v > bestVar) { bestVar = v; best = i; }
+    }
+    return best;
+  }
+
+  // 自适应阈值：与局部均值比较。对扫描件阴影、手机翻拍很有效。
+  function binarizeAdaptive(gray, w, h, k) {
+    var I = new Float64Array((w + 1) * (h + 1)), x, y;
+    for (y = 0; y < h; y++) {
+      var rowSum = 0, base = (y + 1) * (w + 1), prev = y * (w + 1);
+      for (x = 0; x < w; x++) {
+        rowSum += gray[y * w + x];
+        I[base + x + 1] = I[prev + x + 1] + rowSum;
+      }
+    }
+    var r = Math.max(9, Math.round(Math.min(w, h) / 26));
+    var out = new Uint8Array(w * h);
+    k = k == null ? 9 : k;
+    for (y = 0; y < h; y++) {
+      var y0 = Math.max(0, y - r), y1 = Math.min(h - 1, y + r);
+      for (x = 0; x < w; x++) {
+        var x0 = Math.max(0, x - r), x1 = Math.min(w - 1, x + r);
+        var area = (x1 - x0 + 1) * (y1 - y0 + 1);
+        var s = I[(y1 + 1) * (w + 1) + x1 + 1] - I[y0 * (w + 1) + x1 + 1]
+              - I[(y1 + 1) * (w + 1) + x0] + I[y0 * (w + 1) + x0];
+        var m = s / area;
+        out[y * w + x] = gray[y * w + x] < m - k ? 1 : 0;
+      }
+    }
+    return out;
+  }
+
+  function binarizeGlobal(gray, w, h, t) {
+    var out = new Uint8Array(w * h);
+    for (var i = 0; i < gray.length; i++) out[i] = gray[i] < t ? 1 : 0;
+    return out;
+  }
+
+  function clearRects(bin, w, h, rects) {
+    if (!rects || !rects.length) return;
+    for (var r = 0; r < rects.length; r++) {
+      var x0 = Math.max(0, Math.floor(rects[r].x)), y0 = Math.max(0, Math.floor(rects[r].y));
+      var x1 = Math.min(w, Math.ceil(rects[r].x + rects[r].w)), y1 = Math.min(h, Math.ceil(rects[r].y + rects[r].h));
+      for (var y = y0; y < y1; y++) for (var x = x0; x < x1; x++) bin[y * w + x] = 0;
+    }
+  }
+
+  /* =====================================================================
+   * 2. 距离变换（估线宽）+ 骨架细化
+   * ===================================================================== */
+
+  // 两遍倒角距离变换：每个墨点到自己最近的背景点的距离
+  function distanceTransform(bin, w, h) {
+    var INF = 1e9, d = new Float32Array(w * h), x, y, i;
+    for (i = 0; i < d.length; i++) d[i] = bin[i] ? INF : 0;
+    for (y = 0; y < h; y++) {
+      for (x = 0; x < w; x++) {
+        i = y * w + x;
+        if (!d[i]) continue;
+        var v = d[i];
+        if (x > 0 && d[i - 1] + 1 < v) v = d[i - 1] + 1;
+        if (y > 0) {
+          if (d[i - w] + 1 < v) v = d[i - w] + 1;
+          if (x > 0 && d[i - w - 1] + 1.414 < v) v = d[i - w - 1] + 1.414;
+          if (x < w - 1 && d[i - w + 1] + 1.414 < v) v = d[i - w + 1] + 1.414;
+        }
+        d[i] = v;
+      }
+    }
+    for (y = h - 1; y >= 0; y--) {
+      for (x = w - 1; x >= 0; x--) {
+        i = y * w + x;
+        if (!d[i]) continue;
+        var v2 = d[i];
+        if (x < w - 1 && d[i + 1] + 1 < v2) v2 = d[i + 1] + 1;
+        if (y < h - 1) {
+          if (d[i + w] + 1 < v2) v2 = d[i + w] + 1;
+          if (x < w - 1 && d[i + w + 1] + 1.414 < v2) v2 = d[i + w + 1] + 1.414;
+          if (x > 0 && d[i + w - 1] + 1.414 < v2) v2 = d[i + w - 1] + 1.414;
+        }
+        d[i] = v2;
+      }
+    }
+    return d;
+  }
+
+  // Zhang-Suen 细化，输出 1 像素宽的骨架
+  function thin(src, w, h) {
+    var sk = src.slice ? src.slice() : new Uint8Array(src);
+    var N = w * h;
+    var mark = new Uint8Array(N);
+    var changed = true, guard = 0;
+    while (changed && guard++ < 400) {
+      changed = false;
+      for (var sub = 0; sub < 2; sub++) {
+        var any = false;
+        for (var y = 1; y < h - 1; y++) {
+          var row = y * w;
+          for (var x = 1; x < w - 1; x++) {
+            var i = row + x;
+            if (!sk[i]) continue;
+            var p2 = sk[i - w], p3 = sk[i - w + 1], p4 = sk[i + 1], p5 = sk[i + w + 1],
+                p6 = sk[i + w], p7 = sk[i + w - 1], p8 = sk[i - 1], p9 = sk[i - w - 1];
+            var B = p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9;
+            if (B < 2 || B > 6) continue;
+            var A = 0;
+            if (!p2 && p3) A++; if (!p3 && p4) A++; if (!p4 && p5) A++; if (!p5 && p6) A++;
+            if (!p6 && p7) A++; if (!p7 && p8) A++; if (!p8 && p9) A++; if (!p9 && p2) A++;
+            if (A !== 1) continue;
+            if (sub === 0) { if (p2 && p4 && p6) continue; if (p4 && p6 && p8) continue; }
+            else { if (p2 && p4 && p8) continue; if (p2 && p6 && p8) continue; }
+            mark[i] = 1; any = true;
+          }
+        }
+        if (any) {
+          for (var k = 0; k < N; k++) if (mark[k]) { sk[k] = 0; mark[k] = 0; }
+          changed = true;
+        }
+      }
+    }
+    return sk;
+  }
+
+  /* =====================================================================
+   * 3. 骨架 → 折线
+   * ===================================================================== */
+
+  var DX = [-1, 0, 1, -1, 1, -1, 0, 1];
+  var DY = [-1, -1, -1, 0, 0, 1, 1, 1];
+
+  function traceSkeleton(sk, w, h) {
+    var N = w * h;
+    var nb = new Int32Array(8), t;
+    for (t = 0; t < 8; t++) nb[t] = DY[t] * w + DX[t];
+
+    var deg = new Uint8Array(N), x, y, i, k;
+    for (y = 1; y < h - 1; y++) {
+      for (x = 1; x < w - 1; x++) {
+        i = y * w + x;
+        if (!sk[i]) continue;
+        var d = 0;
+        for (k = 0; k < 8; k++) if (sk[i + nb[k]]) d++;
+        deg[i] = d;
+      }
+    }
+
+    var used = new Uint8Array(N);
+    var paths = [];
+
+    // 按方向连续性贪心前进：锯齿骨架也不会被误判成交叉点
+    function walk(startI, firstDir) {
+      var pts = [[startI % w, (startI / w) | 0]];
+      used[startI] = 1;
+      var cur = startI, dd = firstDir, guard = 0;
+      while (guard++ < N) {
+        var rx = -DX[dd], ry = -DY[dd];
+        var best = -1, bestScore = Infinity;
+        for (var q = 0; q < 8; q++) {
+          var j = cur + nb[q];
+          if (j < 0 || j >= N || !sk[j] || used[j]) continue;
+          if (DX[q] === rx && DY[q] === ry) continue;          // 不走回头路
+          var dot = DX[q] * DX[dd] + DY[q] * DY[dd];            // 越大越“顺”
+          var score = (1 - dot) + (q === dd ? 0 : 0.001);
+          if (score < bestScore) { bestScore = score; best = q; }
+        }
+        if (best < 0) break;
+        cur += nb[best];
+        used[cur] = 1;
+        pts.push([cur % w, (cur / w) | 0]);
+        dd = best;
+      }
+      return pts;
+    }
+
+    // 从一个像素向两侧各走一遍，拼成一条完整笔画
+    function traceFrom(i, k) {
+      var a = walk(i, k);
+      var b = walk(i, (k + 4) & 7);
+      if (b.length <= 1) return a;
+      return b.slice(1).reverse().concat(a);
+    }
+
+    function seedWhere(pred) {
+      for (var p = 0; p < N; p++) {
+        if (!sk[p] || used[p] || !pred(p)) continue;
+        for (var q = 0; q < 8; q++) {
+          var j = p + nb[q];
+          if (j < 0 || j >= N || !sk[j] || used[j]) continue;
+          paths.push(traceFrom(p, q));
+          break;
+        }
+      }
+    }
+
+    seedWhere(function (p) { return deg[p] === 1; });        // 先画端点→不会断
+    seedWhere(function (p) { return deg[p] >= 3; });         // 再画交叉点
+    seedWhere(function () { return true; });                 // 最后是环和残片
+
+    return paths;
+  }
+
+  function rdpOpen(pts, eps) {
+    var n = pts.length;
+    if (n < 3) return pts.slice();
+    var keep = new Uint8Array(n), stack = [[0, n - 1]];
+    keep[0] = keep[n - 1] = 1;
+    while (stack.length) {
+      var seg = stack.pop(), a = seg[0], b = seg[1];
+      if (b - a < 2) continue;
+      var x1 = pts[a][0], y1 = pts[a][1], x2 = pts[b][0], y2 = pts[b][1];
+      var dx = x2 - x1, dy = y2 - y1, L = Math.hypot(dx, dy) || 1e-9;
+      var maxD = -1, idx = -1;
+      for (var i = a + 1; i < b; i++) {
+        var d = Math.abs(dy * (pts[i][0] - x1) - dx * (pts[i][1] - y1)) / L;
+        if (d > maxD) { maxD = d; idx = i; }
+      }
+      if (maxD > eps) { keep[idx] = 1; stack.push([a, idx], [idx, b]); }
+    }
+    var out = [];
+    for (var q = 0; q < n; q++) if (keep[q]) out.push(pts[q]);
+    return out;
+  }
+
+  // 闭合环的首尾点重合，直接 RDP 会塌缩成一点：先在最远点切开
+  function rdp(pts, eps) {
+    var n = pts.length;
+    if (n < 3) return pts.slice();
+    if (dist2(pts[0], pts[n - 1]) < 1.0) {
+      var k = 0, best = -1;
+      for (var i = 1; i < n - 1; i++) {
+        var d = dist2(pts[0], pts[i]);
+        if (d > best) { best = d; k = i; }
+      }
+      if (k > 0 && k < n - 1) {
+        var a = rdpOpen(pts.slice(0, k + 1), eps);
+        var b = rdpOpen(pts.slice(k), eps);
+        return a.concat(b.slice(1));
+      }
+    }
+    return rdpOpen(pts, eps);
+  }
+
+  function pathLength(pts) {
+    var s = 0;
+    for (var i = 1; i < pts.length; i++) s += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+    return s;
+  }
+
+  // 把断开的折线端点接起来。
+  // 光看距离会把文字笔画、相邻的两条线连成一条“跳线”，所以必须加方向判据：
+  // 只有两条笔画在断口处“对着”且“顺着”，才算同一根线。
+  function dirAt(p, atEnd) {
+    var n = p.length;
+    if (n < 2) return null;
+    var i0 = atEnd ? n - 1 : 0;
+    var i1 = atEnd ? Math.max(0, n - 4) : Math.min(n - 1, 3);
+    if (i0 === i1) return null;
+    var dx = p[i0][0] - p[i1][0], dy = p[i0][1] - p[i1][1];
+    var L = Math.hypot(dx, dy) || 1e-9;
+    return [dx / L, dy / L];
+  }
+
+  function canJoin(endPt, endDir, b0, bDir, wA, wB) {
+    // 粗细不同就是两种线，先拦掉——哪怕它们正好贴着（比如引线搭在圆上）
+    if (wA && wB && Math.max(wA, wB) / Math.max(0.6, Math.min(wA, wB)) > 1.45) return false;
+    var vx = b0[0] - endPt[0], vy = b0[1] - endPt[1];
+    var d = Math.hypot(vx, vy);
+    if (d < 1.2) return true;                       // 紧贴着，直接接
+    if (!endDir) return true;
+    vx /= d; vy /= d;
+    if (endDir[0] * vx + endDir[1] * vy < 0.55) return false;   // a 不是朝着 b 去的
+    if (bDir && endDir[0] * bDir[0] + endDir[1] * bDir[1] < 0.3) return false; // b 不是顺着接的
+    return true;
+  }
+
+  // 便宜地估一下这条折线的线宽（只用于合并判断）
+  function pathWidth(raw, dist, w) {
+    var n = raw.length, vals = [], step = Math.max(1, Math.floor(n / 30)), i;
+    for (i = 2; i < n - 2; i += step) {
+      var d = dist[raw[i][1] * w + raw[i][0]];
+      if (d > 0 && d < 1e8) vals.push(d * 2);
+    }
+    return vals.length ? median(vals) : 1;
+  }
+
+  function mergePaths(paths, tol, dist, w) {
+    var e2 = tol * tol, round = 0, changed = true, i;
+    for (i = 0; i < paths.length; i++) {
+      if (paths[i]._w == null) paths[i]._w = pathWidth(paths[i], dist, w);
+    }
+    while (changed && round++ < 4) {
+      changed = false;
+      for (i = 0; i < paths.length; i++) {
+        var a = paths[i];
+        if (!a) continue;
+        var ae = a[a.length - 1];
+        var aDir = dirAt(a, true);
+        for (var j = 0; j < paths.length; j++) {
+          if (i === j) continue;
+          var b = paths[j];
+          if (!b) continue;
+          var merged = null;
+          if (dist2(ae, b[0]) <= e2 && canJoin(ae, aDir, b[0], dirAt(b, false), a._w, b._w)) {
+            merged = a.concat(b.slice(1));
+          } else if (dist2(ae, b[b.length - 1]) <= e2) {
+            var rev = b.slice().reverse();
+            if (canJoin(ae, aDir, rev[0], dirAt(rev, false), a._w, b._w)) merged = a.concat(rev.slice(1));
+          }
+          if (merged) {
+            merged._w = (a._w + b._w) / 2;
+            paths[i] = merged; paths[j] = null; changed = true; break;
+          }
+        }
+      }
+      var keep = [];
+      for (var q = 0; q < paths.length; q++) if (paths[q]) keep.push(paths[q]);
+      paths = keep;
+    }
+    return paths;
+  }
+
+  /* =====================================================================
+   * 4. 拟合圆
+   * ===================================================================== */
+
+  function fitCircle(pts) {
+    var n = pts.length;
+    if (n < 5) return null;
+    var sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0, sxz = 0, syz = 0, sz = 0;
+    for (var i = 0; i < n; i++) {
+      var x = pts[i][0], y = pts[i][1], z = x * x + y * y;
+      sx += x; sy += y; sxx += x * x; syy += y * y; sxy += x * y;
+      sxz += x * z; syz += y * z; sz += z;
+    }
+    // 解 [D,E,F]：x²+y²+Dx+Ey+F=0  → 最小二乘
+    var A = [[sxx, sxy, sx], [sxy, syy, sy], [sx, sy, n]];
+    var B = [-sxz, -syz, -sz];
+    var det = function (m) {
+      return m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
+           - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+           + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+    };
+    var D0 = det(A);
+    if (Math.abs(D0) < 1e-6) return null;
+    var rep = function (col) {
+      var M = [[A[0][0], A[0][1], A[0][2]], [A[1][0], A[1][1], A[1][2]], [A[2][0], A[2][1], A[2][2]]];
+      for (var r = 0; r < 3; r++) M[r][col] = B[r];
+      return M;
+    };
+    var D = det(rep(0)) / D0, E = det(rep(1)) / D0, F = det(rep(2)) / D0;
+    var cx = -D / 2, cy = -E / 2;
+    var r2 = cx * cx + cy * cy - F;
+    if (r2 <= 0) return null;
+    var r = Math.sqrt(r2);
+    // 拟合紧密度
+    var dev = 0, cnt = 0;
+    for (var k = 0; k < n; k++) {
+      var dd = Math.abs(Math.hypot(pts[k][0] - cx, pts[k][1] - cy) - r);
+      dev += dd; if (dd < r * 0.12) cnt++;
+    }
+    return { cx: cx, cy: cy, r: r, tight: cnt / n, dev: dev / n };
+  }
+
+  /* =====================================================================
+   * 5. 笔画统计 & 粗细分档
+   * ===================================================================== */
+
+  // 认“文字”：字符由很多又短又密、方向各异的笔画组成；
+  // 虚线/剖面线虽然也短也密，但彼此平行，不能被误判。
+  function markTextLike(strokes) {
+    var n = strokes.length, i, j;
+    var ang = new Float64Array(n);
+    for (i = 0; i < n; i++) {
+      var p0 = strokes[i].pts[0], p1 = strokes[i].pts[strokes[i].pts.length - 1];
+      ang[i] = Math.atan2(p1[1] - p0[1], p1[0] - p0[0]);
+    }
+    var R = 36;
+    for (i = 0; i < n; i++) {
+      var s = strokes[i];
+      s.textLike = false;
+      if (s.circle) continue;
+      if (s.diag > 52) continue;                 // 一根长线不可能是一个字
+      var cx = (s.bbox[0] + s.bbox[2]) / 2, cy = (s.bbox[1] + s.bbox[3]) / 2;
+      var near = 0, cross = 0;
+      for (j = 0; j < n; j++) {
+        if (i === j) continue;
+        var t = strokes[j];
+        var tx = (t.bbox[0] + t.bbox[2]) / 2, ty = (t.bbox[1] + t.bbox[3]) / 2;
+        if (Math.abs(tx - cx) > R || Math.abs(ty - cy) > R) continue;
+        near++;
+        var da = Math.abs(ang[i] - ang[j]) % Math.PI;
+        if (Math.min(da, Math.PI - da) > 0.44) cross++;   // 方向差 > 25°
+      }
+      if (near >= 4 && cross >= 2) s.textLike = true;
+    }
+  }
+
+  function analyze(raw, dist, w, eps) {
+    var n = raw.length, i;
+    var len = pathLength(raw);
+    var minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
+    for (i = 0; i < n; i++) {
+      var px = raw[i][0], py = raw[i][1];
+      if (px < minx) minx = px; if (px > maxx) maxx = px;
+      if (py < miny) miny = py; if (py > maxy) maxy = py;
+    }
+
+    // 线宽：必须在密集的原始骨架上取样；端点处距离变换偏小，要排除
+    var ws = [];
+    var from = n > 8 ? 2 : 0, to = n > 8 ? n - 2 : n;
+    for (i = from; i < to; i++) {
+      var dv = dist[raw[i][1] * w + raw[i][0]];
+      if (dv > 0 && dv < 1e8) ws.push(dv * 2);
+    }
+    var width = ws.length ? median(ws) : 1;
+
+    // 直不直：看所有原始点到弦的最大偏离（比 RDP 点数更稳）
+    var x0 = raw[0][0], y0 = raw[0][1], x1 = raw[n - 1][0], y1 = raw[n - 1][1];
+    var chord = Math.hypot(x1 - x0, y1 - y0);
+    var maxDev = Infinity;
+    if (chord > 1) {
+      maxDev = 0;
+      for (i = 1; i < n - 1; i++) {
+        var d = Math.abs((y1 - y0) * (raw[i][0] - x0) - (x1 - x0) * (raw[i][1] - y0)) / chord;
+        if (d > maxDev) maxDev = d;
+      }
+    }
+    var straight = maxDev <= Math.max(1.4, eps) && len > 6;
+    var closed = n > 10 && dist2(raw[0], raw[n - 1]) <= 6;
+
+    var simp = rdp(raw, eps);
+    var c = null;
+    // 圆/圆弧：用密集的原始点做最小二乘拟合。
+    // 只拿 RDP 后的角点拟合会把矩形四角（恰好共圆）误判成圆，所以必须用原始点。
+    // 这里先不要求“闭合”——圆常被中心线、引线切成几段弧，闭合判断放到后面合并时做。
+    if (!straight && len > 26 && simp.length >= 4) {
+      var stride = Math.max(1, Math.floor(n / 120));
+      var sub = [];
+      for (i = 0; i < n; i += stride) sub.push(raw[i]);
+      var f = fitCircle(sub);
+      if (f && f.tight > 0.93 && f.r > 6 && f.dev < f.r * 0.07) c = f;
+    }
+    return {
+      pts: simp,
+      len: len,
+      bbox: [minx, miny, maxx, maxy],
+      diag: Math.hypot(maxx - minx, maxy - miny),
+      width: width,
+      straight: straight,
+      closed: closed,
+      circle: c
+    };
+  }
+
+  /* =====================================================================
+   * 6. 共线合并 → 识别 虚线 / 点划线 / 实线
+   * ===================================================================== */
+
+  function chainLines(strokes, maxGap, maxOff) {
+    var cand = [];
+    for (var i = 0; i < strokes.length; i++) if (strokes[i].straight && strokes[i].len > 2) cand.push(i);
+    var used = new Uint8Array(strokes.length);
+    var lines = [];
+
+    for (var ci = 0; ci < cand.length; ci++) {
+      var i0 = cand[ci];
+      if (used[i0]) continue;
+      var s0 = strokes[i0];
+      var ox = s0.pts[0][0], oy = s0.pts[0][1];
+      var ex = s0.pts[s0.pts.length - 1][0], ey = s0.pts[s0.pts.length - 1][1];
+      var L = Math.hypot(ex - ox, ey - oy) || 1e-6;
+      var ux = (ex - ox) / L, uy = (ey - oy) / L;
+      var t0 = 0, t1 = L;
+      var members = [i0], dashLens = [s0.len], gaps = [];
+      used[i0] = 1;
+
+      var grew = true;
+      while (grew) {
+        grew = false;
+        var best = -1, bestScore = Infinity, bestT = null;
+        for (var cj = 0; cj < cand.length; cj++) {
+          var j = cand[cj];
+          if (used[j]) continue;
+          var s = strokes[j];
+          var q0 = s.pts[0], q1 = s.pts[s.pts.length - 1];
+          var tdx = q1[0] - q0[0], tdy = q1[1] - q0[1];
+          var tl = Math.hypot(tdx, tdy) || 1e-6;
+          var dot = Math.abs((tdx * ux + tdy * uy) / tl);
+          if (dot < 0.985) continue;                       // 方向差 > 10°
+          var p0 = Math.abs((q0[0] - ox) * (-uy) + (q0[1] - oy) * ux);
+          var p1 = Math.abs((q1[0] - ox) * (-uy) + (q1[1] - oy) * ux);
+          if (p0 > maxOff || p1 > maxOff) continue;
+          var a0 = (q0[0] - ox) * ux + (q0[1] - oy) * uy;
+          var a1 = (q1[0] - ox) * ux + (q1[1] - oy) * uy;
+          var lo = Math.min(a0, a1), hi = Math.max(a0, a1);
+          var gap;
+          if (lo > t1) gap = lo - t1;
+          else if (hi < t0) gap = t0 - hi;
+          else gap = 0;
+          if (gap > maxGap) continue;
+          var score = Math.max(p0, p1) * 2 + gap * 0.6;
+          if (score < bestScore) { bestScore = score; best = j; bestT = [lo, hi, gap]; }
+        }
+        if (best >= 0) {
+          used[best] = 1;
+          members.push(best);
+          dashLens.push(strokes[best].len);
+          gaps.push(bestT[2]);
+          if (bestT[0] < t0) t0 = bestT[0];
+          if (bestT[1] > t1) t1 = bestT[1];
+          grew = true;
+        }
+      }
+
+      lines.push({
+        members: members,
+        ox: ox, oy: oy, ux: ux, uy: uy, t0: t0, t1: t1,
+        len: t1 - t0,
+        width: median(members.map(function (k) { return strokes[k].width; })),
+        dashLens: dashLens,
+        gaps: gaps,
+        p0: [ox + ux * t0, oy + uy * t0],
+        p1: [ox + ux * t1, oy + uy * t1]
+      });
+    }
+    return lines;
+  }
+
+  // 判别 虚线 / 点划线。
+  // 关键不是“有没有间隙”，而是“中间有没有一个明显更短的点”：
+  // 点划线 = 长划 + 点 + 长划，那个点一定夹在中间；虚线每划都差不多长。
+  // 用“中间的短划”而不是“首尾的短划”，可以避开虚线末端被裁掉的那一划。
+  function classifyLine(line, wThin, wThick) {
+    var n = line.dashLens.length;
+    var lens = line.dashLens;
+    var avgD = mean(lens);
+    var avgG = line.gaps.length ? mean(line.gaps) : 0;
+    var kind = 'solid';
+    var base = Math.max(2.4, wThick || 3);
+    if (n >= 3 && avgG >= 1.5) {
+      var med = median(lens);
+      var shortMid = false;
+      for (var i = 1; i < n - 1; i++) {
+        if (lens[i] < med * 0.45) { shortMid = true; break; }
+      }
+      var longDash = avgD > base * 8;      // 划长超过约 5.6 mm，只可能是点划线
+      kind = (shortMid || longDash) ? 'center' : 'hidden';
+    } else if (n === 2 && avgG >= 1.5) {
+      kind = 'hidden';
+    }
+    return { kind: kind, thick: line.width > wThin };
+  }
+
+  /* =====================================================================
+   * 7. 连通块（把相接的轮廓归成一组 = 一个动作）
+   * ===================================================================== */
+
+  function groupComponents(objs, tol) {
+    var n = objs.length, par = new Int32Array(n);
+    for (var i = 0; i < n; i++) par[i] = i;
+    function find(a) { while (par[a] !== a) { par[a] = par[par[a]]; a = par[a]; } return a; }
+    function uni(a, b) { a = find(a); b = find(b); if (a !== b) par[b] = a; }
+    var e2 = tol * tol;
+    for (var a = 0; a < n; a++) {
+      for (var b = a + 1; b < n; b++) {
+        var A = objs[a], B = objs[b];
+        if (dist2(A.p0, B.p0) <= e2 || dist2(A.p0, B.p1) <= e2 ||
+            dist2(A.p1, B.p0) <= e2 || dist2(A.p1, B.p1) <= e2) uni(a, b);
+      }
+    }
+    var map = {}, out = [];
+    for (var k = 0; k < n; k++) {
+      var r = find(k);
+      if (!map[r]) { map[r] = { objs: [], idx: r }; out.push(map[r]); }
+      map[r].objs.push(objs[k]);
+    }
+    return out;
+  }
+
+  /* =====================================================================
+   * 8. 排步骤
+   * ===================================================================== */
+
+  function bboxOf(strokeIdx, strokes) {
+    var x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (var i = 0; i < strokeIdx.length; i++) {
+      var b = strokes[strokeIdx[i]].bbox;
+      if (b[0] < x0) x0 = b[0];
+      if (b[1] < y0) y0 = b[1];
+      if (b[2] > x1) x1 = b[2];
+      if (b[3] > y1) y1 = b[3];
+    }
+    return [x0, y0, x1, y1];
+  }
+
+  function buildSteps(strokes, lines, opts) {
+    var W = opts.w, H = opts.h;
+    var steps = [];
+    var wid = strokes.map(function (s) { return s.width; }).filter(function (v) { return v > 0; });
+    var minW = wid.length ? Math.min.apply(null, wid) : 2;
+    var maxW = wid.length ? Math.max.apply(null, wid) : 4;
+    var wThin;
+    if (!wid.length) wThin = 2.5;
+    else if (maxW - minW < 0.8) wThin = minW < 2.2 ? 1e9 : -1;   // 只有一种线宽
+    else wThin = otsuSplit(wid);
+    // 粗实线的线宽 ≈ 0.7 mm，是国标定值，可以当“图上 1 mm 有多少像素”的标尺
+    var hiW = wid.filter(function (v) { return v > wThin; }).sort(function (a, b) { return a - b; });
+    var wThickEst = Math.max(3, hiW.length ? hiW[hiW.length >> 1] : maxW);
+
+    // ---- 把每条笔画归到 line / circle / free
+    var lineOf = new Int32Array(strokes.length).fill(-1);
+    lines.forEach(function (ln, li) { ln.members.forEach(function (si) { lineOf[si] = li; }); });
+
+    var centerObjs = [], thickObjs = [], thinObjs = [], hiddenObjs = [], circles = [], freeObjs = [];
+
+    lines.forEach(function (ln) {
+      var textish = 0;
+      ln.members.forEach(function (si) { if (strokes[si].textLike) textish++; });
+      if (textish * 2 > ln.members.length) { ln.kind = 'thin'; thinObjs.push(ln); return; }
+      var c = classifyLine(ln, wThin, wThickEst);
+      if (c.kind === 'center') { ln.kind = 'center'; centerObjs.push(ln); return; }
+      if (c.kind === 'hidden') { ln.kind = 'hidden'; hiddenObjs.push(ln); return; }
+      ln.kind = c.thick ? 'thick' : 'thin';
+      (c.thick ? thickObjs : thinObjs).push(ln);
+    });
+    // 线型要回写到笔画上，否则笔画自己不知道属于哪一类
+    lines.forEach(function (ln) {
+      ln.members.forEach(function (si) { strokes[si].kind = ln.kind; });
+    });
+
+    // 自由笔画（圆、闭合环、折线）也包装成和 line 一样的结构，后面统一处理
+    var asObj = function (s, si) {
+      return {
+        members: [si], p0: s.pts[0], p1: s.pts[s.pts.length - 1],
+        len: s.len, width: s.width, free: true
+      };
+    };
+
+    // ---- 圆：圆心和半径相近的弧段合起来，凑够一整圈才算圆。
+    // 圆经常被中心线、引线切成好几段弧，单段不闭合，靠这步还原。
+    var circleGroups = [], circleOwner = {}, fullCircles = [];
+    strokes.forEach(function (s, si) {
+      if (!s.circle) return;
+      var g = null;
+      for (var k = 0; k < circleGroups.length; k++) {
+        var t = circleGroups[k];
+        if (Math.abs(t.cx - s.circle.cx) < 10 && Math.abs(t.cy - s.circle.cy) < 10 &&
+            Math.abs(t.r - s.circle.r) < 7) { g = t; break; }
+      }
+      if (!g) { g = { r: s.circle.r, cx: s.circle.cx, cy: s.circle.cy, members: [], len: 0 }; circleGroups.push(g); }
+      g.members.push(si);
+      g.len += s.len;
+    });
+    circleGroups.forEach(function (g) {
+      if (g.len >= 0.7 * 2 * Math.PI * g.r) {
+        fullCircles.push(g);
+        g.members.forEach(function (si) { circleOwner[si] = g; });
+      }
+    });
+
+    strokes.forEach(function (s, si) {
+      if (lineOf[si] >= 0) return;
+      if (circleOwner[si]) { s.kind = 'circle'; return; }   // 整圆，后面统一出步骤
+      var o = asObj(s, si);
+      if (s.textLike) { s.kind = 'thin'; o.kind = 'thin'; thinObjs.push(o); return; }
+      s.kind = s.width > wThin ? 'thick' : 'thin';
+      o.kind = s.kind;
+      if (s.kind === 'thick') thickObjs.push(o); else thinObjs.push(o);
+    });
+    strokes.forEach(function (s) { if (!s.kind) s.kind = 'other'; });
+
+    // 又小又碎的粗线块（数字笔画、箭头尖）不配当轮廓，降为细线
+    thickObjs = thickObjs.filter(function (o) {
+      var bb = bboxOf(o.members, strokes);
+      var d = Math.hypot(bb[2] - bb[0], bb[3] - bb[1]);
+      if (d < 22) {
+        o.members.forEach(function (si) { strokes[si].kind = 'thin'; });
+        o.kind = 'thin';
+        thinObjs.push(o);
+        return false;
+      }
+      return true;
+    });
+
+    function pushStep(kind, strokeIdx) {
+      if (!strokeIdx.length) return;
+      var bb = bboxOf(strokeIdx, strokes);
+      var len = 0;
+      strokeIdx.forEach(function (si) { len += strokes[si].len; });
+      steps.push({
+        kind: kind,
+        strokes: strokeIdx,
+        bbox: bb,
+        len: len,
+        dashes: strokeIdx.length
+      });
+    }
+
+    // ---- 1. 基准中心线：合成一步（老师也是一口气把几条中心线都定下来）
+    centerObjs.sort(function (a, b) { return b.len - a.len; });
+    var centerIdx = [];
+    centerObjs.forEach(function (o) { centerIdx = centerIdx.concat(o.members); });
+    if (centerIdx.length) pushStep('center', centerIdx);
+
+    // ---- 2. 可见轮廓：连通块，一块一步
+    var thickStart = steps.length;
+    var comps = groupComponents(thickObjs, Math.max(16, opts.mergeTol * 3.4));
+    comps.forEach(function (c) {
+      var idx = [];
+      c.objs.forEach(function (o) { idx = idx.concat(o.members); });
+      var bb = bboxOf(idx, strokes);
+      c.diag = Math.hypot(bb[2] - bb[0], bb[3] - bb[1]);
+      c.idx = idx;
+    });
+    comps.sort(function (a, b) { return b.diag - a.diag; });
+
+    var MAXPER = 14;
+    comps.forEach(function (c) {
+      var order = c.objs.slice().sort(function (a, b) { return b.len - a.len; });
+      if (order.length <= MAXPER) {
+        pushStep('thick', c.idx);
+      } else {
+        for (var i = 0; i < order.length; i += MAXPER) {
+          var chunk = order.slice(i, i + MAXPER);
+          var idx = [];
+          chunk.forEach(function (o) { idx = idx.concat(o.members); });
+          pushStep('thick', idx);
+        }
+      }
+    });
+
+    // 被引线、尺寸线切碎的轮廓，按邻近关系把碎片并回去。
+    // 判邻近要用“端点距离”，不能用包围盒——图框的包围盒套住整张图，
+    // 用包围盒会把所有东西并成一步。
+    function stepGap(A, B) {
+      var best = Infinity;
+      for (var i = 0; i < A.strokes.length; i++) {
+        var p = strokes[A.strokes[i]].pts;
+        var a0 = p[0], a1 = p[p.length - 1];
+        for (var j = 0; j < B.strokes.length; j++) {
+          var q = strokes[B.strokes[j]].pts;
+          var b0 = q[0], b1 = q[q.length - 1];
+          var d0 = Math.hypot(a0[0] - b0[0], a0[1] - b0[1]);
+          var d1 = Math.hypot(a0[0] - b1[0], a0[1] - b1[1]);
+          var d2 = Math.hypot(a1[0] - b0[0], a1[1] - b0[1]);
+          var d3 = Math.hypot(a1[0] - b1[0], a1[1] - b1[1]);
+          var m = Math.min(Math.min(d0, d1), Math.min(d2, d3));
+          if (m < best) best = m;
+        }
+      }
+      return best;
+    }
+
+    (function mergeFragments() {
+      var merged = true, guard = 0;
+      while (merged && guard++ < 60) {
+        merged = false;
+        for (var i = thickStart; i < steps.length && i < thickStart + 40; i++) {
+          var A = steps[i];
+          if (!A || A.kind !== 'thick') continue;
+          for (var j = i + 1; j < steps.length && j < thickStart + 40; j++) {
+            var B = steps[j];
+            if (!B || B.kind !== 'thick') continue;
+            if (A.strokes.length + B.strokes.length > 9) continue;
+            if (stepGap(A, B) > 30) continue;
+            A.strokes = A.strokes.concat(B.strokes);
+            A.bbox = bboxOf(A.strokes, strokes);
+            A.len = 0;
+            for (var q = 0; q < A.strokes.length; q++) A.len += strokes[A.strokes[q]].len;
+            steps.splice(j, 1);
+            merged = true;
+            break;
+          }
+          if (merged) break;
+        }
+      }
+    })();
+
+    // ---- 3. 圆
+    var usedStroke = new Uint8Array(strokes.length);
+    steps.forEach(function (st) { st.strokes.forEach(function (i) { usedStroke[i] = 1; }); });
+    fullCircles.sort(function (a, b) { return b.r - a.r; });
+    fullCircles.forEach(function (g) {
+      var good = g.members.filter(function (i) { return !usedStroke[i]; });
+      if (!good.length) return;
+      good.forEach(function (i) { usedStroke[i] = 1; });
+      pushStep('circle', good);
+    });
+
+    // ---- 4. 虚线：合成一步
+    hiddenObjs.sort(function (a, b) { return b.len - a.len; });
+    var hiddenIdx = [];
+    hiddenObjs.forEach(function (o) { hiddenIdx = hiddenIdx.concat(o.members); });
+    hiddenIdx = hiddenIdx.filter(function (i) { return !usedStroke[i]; });
+    if (hiddenIdx.length) {
+      pushStep('hidden', hiddenIdx);
+      hiddenIdx.forEach(function (i) { usedStroke[i] = 1; });
+    }
+
+    // ---- 5. 细实线（尺寸线/剖面线/过渡线/文字）
+    thinObjs.sort(function (a, b) { return b.len - a.len; });
+    var thinIdx = [];
+    thinObjs.forEach(function (o) { thinIdx = thinIdx.concat(o.members); });
+    // 按“行带 + 横向”排，让同一批细线聚在一起，而不是横跨整张图
+    thinIdx.sort(function (a, b) {
+      var A = strokes[a].bbox, B = strokes[b].bbox;
+      var ay = Math.round((A[1] + A[3]) / 2 / 80), by = Math.round((B[1] + B[3]) / 2 / 80);
+      if (ay !== by) return ay - by;
+      return (A[0] + A[2]) / 2 - (B[0] + B[2]) / 2;
+    });
+    thinIdx = thinIdx.filter(function (i, k, arr) { return i >= 0 && arr.indexOf(i) === k; });
+    if (thinIdx.length) {
+      // 细线太多，按数量分块，避免步骤爆炸
+      var PER = 40;
+      for (var t = 0; t < thinIdx.length; t += PER) {
+        var chunk = thinIdx.slice(t, t + PER);
+        var good = chunk.filter(function (i) { return !usedStroke[i]; });
+        if (good.length) { pushStep('thin', good); good.forEach(function (i) { usedStroke[i] = 1; }); }
+      }
+    }
+
+    // ---- 6. 剩余
+    var rest = [];
+    for (var r = 0; r < strokes.length; r++) if (!usedStroke[r]) rest.push(r);
+    for (var q = 0; q < rest.length; q += 20) {
+      var ch = rest.slice(q, q + 20);
+      pushStep('other', ch);
+      ch.forEach(function (i) { usedStroke[i] = 1; });
+    }
+
+    // ---- 标题/要点
+    var region = function (bb) {
+      var cx = (bb[0] + bb[2]) / 2 / W, cy = (bb[1] + bb[3]) / 2 / H;
+      var vx = cx < 0.36 ? '左' : cx > 0.64 ? '右' : '中';
+      var vy = cy < 0.36 ? '上' : cy > 0.64 ? '下' : '中';
+      if (vx === '中' && vy === '中') return '画面中部';
+      return '画面' + vy + (vx === '中' ? '' : vx) + '部';
+    };
+    var total = steps.length;
+    steps.forEach(function (st, i) {
+      var info = KIND[st.kind] || KIND.other;
+      var closed = false;
+      st.strokes.forEach(function (si) {
+        var s = strokes[si];
+        if (s.closed && st.kind === 'thick') closed = true;
+      });
+      var title = info.label;
+      if (st.kind === 'thick') {
+        if (closed) title = '画闭合轮廓';
+        else if (st.len > 0) title = '画可见轮廓';
+      }
+      if (st.kind === 'circle') {
+        var s0 = strokes[st.strokes[0]];
+        var d = s0.circle ? Math.round(s0.circle.r * 2) : 0;
+        title = d ? '画圆 ⌀' + d + 'px' : '画圆';
+      }
+      var note = NOTE[st.kind] || NOTE.other;
+      if (st.kind === 'thick' && closed) note = '粗实线闭合轮廓。先把整个外形框起来，再回头补细节——这是“先定大形”的关键一步。';
+      if (st.kind === 'center') {
+        note = NOTE.center;
+        if (st.len > Math.max(W, H) * 0.55) note = '细点划线：贯通整个图幅的基准/对称中心线。先画它，后面所有尺寸都从这里量（线端超出轮廓 2~3 mm）。';
+      }
+      st.id = i;
+      st.title = title;
+      st.note = note;
+      st.region = region(st.bbox);
+      if (st.kind === 'thick' || st.kind === 'hidden') {
+        st.title += ' · ' + st.region.replace('画面', '');
+      }
+      st.short = info.short;
+      st.color = info.color;
+    });
+
+    return { steps: steps, wThin: wThin };
+  }
+
+  /* =====================================================================
+   * 9. 主入口
+   * ===================================================================== */
+
+  function buildPlan(img, opts) {
+    opts = Object.assign({}, DEFAULTS, opts || {});
+    var t0 = Date.now();
+    var W0 = img.width, H0 = img.height;
+
+    var gray = toGray(img.data, W0, H0, img.channels || 4);
+    if (opts.invert) { for (var iv = 0; iv < gray.length; iv++) gray[iv] = 255 - gray[iv]; }
+
+    var ds = downscaleGray(gray, W0, H0, opts.maxDim);
+    var w = ds.w, h = ds.h, sc = ds.scale;
+    gray = ds.gray;
+
+    var bin;
+    var thr = null;
+    if (opts.threshold != null) {
+      thr = opts.threshold;
+      bin = binarizeGlobal(gray, w, h, thr);
+    } else if (opts.adaptive) {
+      bin = binarizeAdaptive(gray, w, h, 9);
+      thr = 'adaptive';
+    } else {
+      thr = otsu(gray);
+      bin = binarizeGlobal(gray, w, h, thr);
+    }
+
+    if (opts.ignoreRects && opts.ignoreRects.length) {
+      clearRects(bin, w, h, opts.ignoreRects.map(function (r) {
+        return { x: r.x * sc, y: r.y * sc, w: r.w * sc, h: r.h * sc };
+      }));
+    }
+
+    var dist = distanceTransform(bin, w, h);
+    var sk = thin(bin, w, h);
+    var raw = traceSkeleton(sk, w, h);
+
+    var paths = [];
+    for (var p = 0; p < raw.length; p++) {
+      if (raw[p].length < 2) continue;
+      if (pathLength(raw[p]) < opts.minLen * 0.7) continue;
+      paths.push(raw[p]);
+    }
+    paths = mergePaths(paths, opts.mergeTol, dist, w);
+
+    var strokes = [];
+    for (var s = 0; s < paths.length; s++) {
+      var st = analyze(paths[s], dist, w, opts.rdpEps);
+      if (st.len < opts.minLen) continue;
+      // 毛刺：比自身线宽还短的碎块（常见于圆角、粗线拐点），不是线，丢掉
+      if (!st.circle && st.len < 30 && st.width > st.len * 0.45) continue;
+      st.kind = null;
+      strokes.push(st);
+    }
+
+    markTextLike(strokes);
+    var lines = chainLines(strokes, opts.maxGap * Math.max(0.6, sc), opts.mergeTol * 0.9 + 1.2);
+    var built = buildSteps(strokes, lines, { w: w, h: h, mergeTol: opts.mergeTol });
+
+    var stats = { total: strokes.length, steps: built.steps.length, kinds: {} };
+    built.steps.forEach(function (x) { stats.kinds[x.kind] = (stats.kinds[x.kind] || 0) + 1; });
+
+    return {
+      w: w, h: h,
+      srcW: W0, srcH: H0,
+      scale: sc,
+      threshold: thr,
+      strokes: strokes,
+      steps: built.steps,
+      stats: stats,
+      ms: Date.now() - t0
+    };
+  }
+
+  return {
+    version: '1.0.0',
+    KIND: KIND,
+    ORDER: ORDER,
+    DEFAULTS: DEFAULTS,
+    buildPlan: buildPlan,
+    // 下面这些给测试/调试用
+    _internals: {
+      toGray: toGray, downscaleGray: downscaleGray, otsu: otsu,
+      binarizeAdaptive: binarizeAdaptive, binarizeGlobal: binarizeGlobal,
+      distanceTransform: distanceTransform, thin: thin,
+      traceSkeleton: traceSkeleton, rdp: rdp, pathLength: pathLength,
+      mergePaths: mergePaths, fitCircle: fitCircle, chainLines: chainLines
+    }
+  };
+});
+
+</script>
+<script>
+/*!
+ * 内置示例图纸：一个「L 形支架」的三视图（第一角法）
+ * 全部用 Canvas 2D 现画，不依赖外部图片，打开就能用。
+ * 单位：毫米；S = 每毫米像素数。
+ */
+(function (root) {
+  'use strict';
+
+  var S = 7;                       // 7 px / mm
+  var INK = '#111111';
+  var TH = 4.2;                    // 粗实线
+  var TN = 1.5;                    // 细实线
+
+  function line(ctx, x1, y1, x2, y2, w, dash) {
+    ctx.save();
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = w;
+    ctx.lineCap = 'round';
+    ctx.setLineDash(dash || []);
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function path(ctx, segs, w, dash, close) {
+    ctx.save();
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = w;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.setLineDash(dash || []);
+    ctx.beginPath();
+    ctx.moveTo(segs[0][0], segs[0][1]);
+    for (var i = 1; i < segs.length; i++) ctx.lineTo(segs[i][0], segs[i][1]);
+    if (close) ctx.closePath();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function rect(ctx, x, y, w, h, lw, dash) {
+    path(ctx, [[x, y], [x + w, y], [x + w, y + h], [x, y + h]], lw, dash, true);
+  }
+
+  function circle(ctx, cx, cy, r, lw, dash) {
+    ctx.save();
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = lw;
+    ctx.setLineDash(dash || []);
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // 中心线（点划线）：长划 8 mm + 间隙 1.5 mm + 点 1 mm + 间隙 1.5 mm
+  var DASH_CENTER = [8 * S, 1.5 * S, 1 * S, 1.5 * S];
+  // 虚线：划 3.5 mm + 间隙 1 mm
+  var DASH_HIDDEN = [3.5 * S, 1 * S];
+
+  // 中心线要“一笔贯穿”，不能从圆心往两边各画一半——否则点划线会从中间断相
+  function cross(ctx, cx, cy, arm) {
+    line(ctx, cx - arm, cy, cx + arm, cy, 1.4, DASH_CENTER);
+    line(ctx, cx, cy - arm, cx, cy + arm, 1.4, DASH_CENTER);
+  }
+
+  function arrow(ctx, x, y, ang, size) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(ang);
+    ctx.fillStyle = INK;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(-size, -size * 0.28);
+    ctx.lineTo(-size, size * 0.28);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function text(ctx, str, x, y, size, align, baseline, rot) {
+    ctx.save();
+    ctx.fillStyle = INK;
+    ctx.font = (size || 26) + 'px "Microsoft YaHei","PingFang SC",sans-serif';
+    ctx.textAlign = align || 'center';
+    ctx.textBaseline = baseline || 'middle';
+    ctx.translate(x, y);
+    if (rot) ctx.rotate(rot);
+    ctx.fillText(str, 0, 0);
+    ctx.restore();
+  }
+
+  /* ---------------- 各视图 ---------------- */
+
+  function frontView(ctx, ox, oy) {
+    var X = function (mm) { return ox + mm * S; };
+    var Y = function (mm) { return oy + mm * S; };
+
+    rect(ctx, X(0), Y(0), 100 * S, 40 * S, TH);          // 立板
+    rect(ctx, X(0), Y(40), 100 * S, 12 * S, TH);         // 底板
+    circle(ctx, X(50), Y(26), 10 * S, TH);               // ⌀20 通孔
+    cross(ctx, X(50), Y(26), 16 * S);                    // 中心线超轮廓 6 mm
+
+    // 底板两个孔的不可见轮廓
+    line(ctx, X(20), Y(40), X(20), Y(52), 1.4, DASH_HIDDEN);
+    line(ctx, X(80), Y(40), X(80), Y(52), 1.4, DASH_HIDDEN);
+
+    // 尺寸 100
+    line(ctx, X(0), Y(-4), X(0), Y(-15), TN);
+    line(ctx, X(100), Y(-4), X(100), Y(-15), TN);
+    line(ctx, X(0), Y(-13), X(100), Y(-13), TN);
+    arrow(ctx, X(0), Y(-13), 0, 12);
+    arrow(ctx, X(100), Y(-13), Math.PI, 12);
+    text(ctx, '100', X(50), Y(-18), 26);
+
+    // 尺寸 40 / 12（左侧）
+    line(ctx, X(-4), Y(0), X(-14), Y(0), TN);
+    line(ctx, X(-4), Y(40), X(-14), Y(40), TN);
+    line(ctx, X(-12), Y(0), X(-12), Y(40), TN);
+    arrow(ctx, X(-12), Y(0), -Math.PI / 2, 12);
+    arrow(ctx, X(-12), Y(40), Math.PI / 2, 12);
+    text(ctx, '40', X(-19), Y(20), 26);
+
+    line(ctx, X(-4), Y(40), X(-14), Y(40), TN);
+    line(ctx, X(-4), Y(52), X(-14), Y(52), TN);
+    line(ctx, X(-12), Y(40), X(-12), Y(52), TN);
+    arrow(ctx, X(-12), Y(40), -Math.PI / 2, 10);
+    arrow(ctx, X(-12), Y(52), Math.PI / 2, 10);
+    text(ctx, '12', X(-17), Y(46), 24);
+
+    // ⌀20 引出线
+    line(ctx, X(57), Y(19), X(72), Y(6), TN);
+    line(ctx, X(72), Y(6), X(86), Y(6), TN);
+    text(ctx, '⌀20', X(93), Y(6), 26, 'left');
+  }
+
+  function topView(ctx, ox, oy) {
+    var X = function (mm) { return ox + mm * S; };
+    var Y = function (mm) { return oy + mm * S; };
+
+    rect(ctx, X(0), Y(0), 100 * S, 60 * S, TH);          // 底板外形
+    line(ctx, X(0), Y(16), X(100), Y(16), TH);           // 立板下端面
+
+    // ⌀20 孔的不可见轮廓
+    line(ctx, X(40), Y(0), X(40), Y(16), 1.4, DASH_HIDDEN);
+    line(ctx, X(60), Y(0), X(60), Y(16), 1.4, DASH_HIDDEN);
+
+    // 两个 ⌀10 通孔
+    circle(ctx, X(20), Y(42), 5 * S, TH);
+    circle(ctx, X(80), Y(42), 5 * S, TH);
+    cross(ctx, X(20), Y(42), 11 * S);
+    cross(ctx, X(80), Y(42), 11 * S);
+
+    // 尺寸 60
+    line(ctx, X(104), Y(0), X(115), Y(0), TN);
+    line(ctx, X(104), Y(60), X(115), Y(60), TN);
+    line(ctx, X(113), Y(0), X(113), Y(60), TN);
+    arrow(ctx, X(113), Y(0), -Math.PI / 2, 12);
+    arrow(ctx, X(113), Y(60), Math.PI / 2, 12);
+    text(ctx, '60', X(121), Y(30), 26, 'left');
+
+    line(ctx, X(20), Y(51), X(46), Y(68), TN);
+    text(ctx, '2×⌀10 通孔', X(48), Y(68), 24, 'left');
+  }
+
+  function leftView(ctx, ox, oy) {
+    var X = function (mm) { return ox + mm * S; };
+    var Y = function (mm) { return oy + mm * S; };
+
+    // 左视图：横向是“宽”（前后方向）。按第一角法，靠近主视图的一侧＝物体的后面，
+    // 所以立板画在左边（Y 从 0 到 16）。
+    rect(ctx, X(0), Y(40), 60 * S, 12 * S, TH);          // 底板
+    rect(ctx, X(0), Y(0), 16 * S, 40 * S, TH);           // 立板
+
+    // ⌀20 通孔：轴线沿前后方向，在左视图里投影成两条水平虚线
+    line(ctx, X(0), Y(16), X(16), Y(16), 1.4, DASH_HIDDEN);
+    line(ctx, X(0), Y(36), X(16), Y(36), 1.4, DASH_HIDDEN);
+    line(ctx, X(-3), Y(26), X(19), Y(26), 1.4, DASH_CENTER);
+
+    // 底板 ⌀10 通孔：竖直方向，投影成两条竖直虚线
+    line(ctx, X(37), Y(40), X(37), Y(52), 1.4, DASH_HIDDEN);
+    line(ctx, X(47), Y(40), X(47), Y(52), 1.4, DASH_HIDDEN);
+    line(ctx, X(42), Y(36), X(42), Y(56), 1.4, DASH_CENTER);
+  }
+
+  function draw(ctx) {
+    ctx.save();
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, 1620, 1240);
+    ctx.restore();
+
+    // 第一角法：主视图在上，俯视图在下（长对正），左视图在右（高平齐）
+    frontView(ctx, 210, 210);     // 30mm, 30mm
+    topView(ctx, 210, 700);       // 30mm, 100mm
+    leftView(ctx, 1085, 210);     // 155mm, 30mm
+
+    // 图框
+    ctx.save();
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(40, 40, 1540, 1160);
+    ctx.restore();
+  }
+
+  root.Demo = {
+    width: 1620,
+    height: 1240,
+    draw: draw,
+    S: S
+  };
+})(typeof self !== 'undefined' ? self : this);
+
+</script>
+<script>
+/*!
+ * 机械制图分步教练 · app.js
+ * 界面、画布动画、步骤编辑。
+ */
+(function () {
+  'use strict';
+
+  var $ = function (id) { return document.getElementById(id); };
+  var KIND = Engine.KIND;
+  var ORDER = Engine.ORDER;
+
+  var cv = $('cv'), ctx = cv.getContext('2d');
+
+  var S = {
+    img: null, imgW: 0, imgH: 0,   // 源图（canvas）
+    plan: null,
+    steps: [],
+    pos: 0,            // 全局笔画进度（按长度累计）
+    totalLen: 0,
+    playing: false,
+    speed: 1,
+    ghost: 'faint',
+    ignoreRects: [],
+    ignoring: false,
+    dragRect: null,
+    view: { s: 1, ox: 0, oy: 0 },
+    dpr: 1,
+    raf: 0,
+    lastTs: 0,
+    lastCur: -1,
+    busy: false
+  };
+
+  var ACTIVE_COLOR = {
+    center: '#7a63d6', thick: '#d4553a', circle: '#d4553a',
+    thin: '#8f8f8f', hidden: '#2f7dd1', other: '#b98a5e'
+  };
+
+  /* ===================================================================
+   * 画布
+   * =================================================================== */
+
+  function resize() {
+    var dpr = window.devicePixelRatio || 1;
+    var w = cv.clientWidth, h = cv.clientHeight;
+    if (!w || !h) return;
+    S.dpr = dpr;
+    cv.width = Math.round(w * dpr);
+    cv.height = Math.round(h * dpr);
+    render();
+  }
+
+  function computeView(vw, vh) {
+    var w = cv.clientWidth, h = cv.clientHeight;
+    var pad = window.innerWidth <= 860 ? 10 : 34;
+    var s = Math.min((w - pad * 2) / vw, (h - pad * 2) / vh);
+    s = Math.max(0.05, Math.min(s, 4));
+    S.view.s = s;
+    S.view.ox = (w - vw * s) / 2;
+    S.view.oy = (h - vh * s) / 2;
+  }
+
+  function stepAt(pos) {
+    var acc = 0;
+    for (var i = 0; i < S.steps.length; i++) {
+      var L = S.steps[i].len;
+      if (pos <= acc + L || i === S.steps.length - 1) {
+        return { i: i, f: Math.max(0, Math.min(1, (pos - acc) / Math.max(1, L))) };
+      }
+      acc += L;
+    }
+    return { i: 0, f: 0 };
+  }
+
+  function strokeWidthOf(kind) {
+    if (kind === 'thick' || kind === 'circle') return 3.1;
+    if (kind === 'hidden') return 1.9;
+    if (kind === 'thin') return 1.35;
+    if (kind === 'center') return 1.25;
+    return 1.9;
+  }
+
+  // 画一条折线的前 f 部分，返回笔尖位置
+  function drawStroke(s, f, style, out) {
+    var pts = s.pts;
+    if (!pts || pts.length < 2) return null;
+    var total = 0, i;
+    for (i = 1; i < pts.length; i++) total += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+    var target = total * f;
+    if (target <= 0.01) return { x: pts[0][0], y: pts[0][1] };
+
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    var acc = 0, tip = null;
+    for (i = 1; i < pts.length; i++) {
+      var seg = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+      if (acc + seg <= target) {
+        ctx.lineTo(pts[i][0], pts[i][1]);
+        acc += seg;
+        tip = { x: pts[i][0], y: pts[i][1] };
+      } else {
+        var k = (target - acc) / (seg || 1);
+        var x = pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * k;
+        var y = pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * k;
+        ctx.lineTo(x, y);
+        tip = { x: x, y: y };
+        acc = target;
+        break;
+      }
+    }
+    ctx.strokeStyle = style;
+    ctx.lineWidth = strokeWidthOf(s.kind || 'thick') / S.view.s;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+    return tip;
+  }
+
+  function drawStep(step, frac, active) {
+    if (!step) return null;
+    var target = step.len * frac;
+    var acc = 0, tip = null;
+    for (var i = 0; i < step.strokes.length; i++) {
+      var s = S.plan.strokes[step.strokes[i]];
+      if (!s) continue;
+      if (acc >= target) break;
+      var remain = target - acc;
+      var f2 = remain >= s.len ? 1 : remain / Math.max(1, s.len);
+      var col = active ? (ACTIVE_COLOR[step.kind] || '#d4553a') : '#1b1b1b';
+      var p = drawStroke(s, f2, col);
+      if (active && f2 < 1) tip = p;
+      else if (active && p) tip = p;
+      acc += s.len;
+      if (f2 < 1) break;
+    }
+    return tip;
+  }
+
+  function render() {
+    var w = cv.clientWidth, h = cv.clientHeight;
+    if (!w || !h) return;
+    ctx.setTransform(S.dpr, 0, 0, S.dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+
+    if (!S.img) return;
+    var vw = S.plan ? S.plan.w : S.imgW;
+    var vh = S.plan ? S.plan.h : S.imgH;
+    computeView(vw, vh);
+    var v = S.view;
+
+    ctx.save();
+    ctx.translate(v.ox, v.oy);
+    ctx.scale(v.s, v.s);
+
+    // 图纸
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,.55)';
+    ctx.shadowBlur = 22 / v.s;
+    ctx.shadowOffsetY = 6 / v.s;
+    ctx.fillStyle = '#fbfaf6';
+    ctx.fillRect(0, 0, vw, vh);
+    ctx.restore();
+
+    // 底图
+    if (S.ghost !== 'none') {
+      ctx.save();
+      ctx.globalAlpha = S.ghost === 'strong' ? 0.26 : 0.09;
+      ctx.drawImage(S.img, 0, 0, vw, vh);
+      ctx.restore();
+    }
+
+    // 忽略区
+    if (S.ignoreRects.length || (S.dragRect)) {
+      var rects = S.ignoreRects.slice();
+      if (S.dragRect) rects.push(S.dragRect);
+      var sc = S.plan ? S.plan.scale : 1;
+      ctx.save();
+      ctx.strokeStyle = 'rgba(212,85,58,.85)';
+      ctx.fillStyle = 'rgba(212,85,58,.10)';
+      ctx.lineWidth = 1.2 / v.s;
+      ctx.setLineDash([6 / v.s, 4 / v.s]);
+      for (var r = 0; r < rects.length; r++) {
+        var q = rects[r];
+        ctx.fillRect(q.x * sc, q.y * sc, q.w * sc, q.h * sc);
+        ctx.strokeRect(q.x * sc, q.y * sc, q.w * sc, q.h * sc);
+      }
+      ctx.restore();
+    }
+
+    // 笔画
+    if (S.plan && S.steps.length) {
+      var at = stepAt(S.pos);
+      var tip = null;
+      for (var i = 0; i < S.steps.length; i++) {
+        if (i < at.i) drawStep(S.steps[i], 1, false);
+        else if (i === at.i) { tip = drawStep(S.steps[i], at.f, true); break; }
+        else break;
+      }
+      // 笔尖
+      if (tip && S.pos < S.totalLen) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(tip.x, tip.y, 4.2 / v.s, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(212,85,58,.9)';
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(tip.x, tip.y, 9 / v.s, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(212,85,58,.35)';
+        ctx.lineWidth = 1.5 / v.s;
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    ctx.restore();
+  }
+
+  /* ===================================================================
+   * 播放
+   * =================================================================== */
+
+  function frame(ts) {
+    if (!S.playing) { S.raf = 0; return; }
+    var dt = S.lastTs ? Math.min(0.06, (ts - S.lastTs) / 1000) : 0.016;
+    S.lastTs = ts;
+    var v = 820 * S.speed;              // 每秒画多少像素（图纸坐标）
+    S.pos += v * dt;
+    if (S.pos >= S.totalLen) { S.pos = S.totalLen; stop(); }
+    syncCoach();
+    render();
+    if (S.playing) S.raf = requestAnimationFrame(frame);
+  }
+
+  function play() {
+    if (!S.steps.length) return;
+    if (S.pos >= S.totalLen - 0.5) S.pos = 0;
+    S.playing = true;
+    S.lastTs = 0;
+    $('btn-play').textContent = '❙❙ 暂停';
+    if (!S.raf) S.raf = requestAnimationFrame(frame);
+    syncCoach();
+  }
+
+  function stop() {
+    S.playing = false;
+    if (S.raf) { cancelAnimationFrame(S.raf); S.raf = 0; }
+    $('btn-play').textContent = '▶ 播放';
+    syncCoach();
+    render();
+  }
+
+  function togglePlay() { S.playing ? stop() : play(); }
+
+  function jump(stepIndex) {
+    if (!S.steps.length) return;
+    stepIndex = Math.max(0, Math.min(S.steps.length - 1, stepIndex));
+    var acc = 0;
+    for (var i = 0; i < stepIndex; i++) acc += S.steps[i].len;
+    S.pos = acc;
+    syncCoach();
+    syncScrub();
+    render();
+  }
+
+  function syncScrub() {
+    var el = $('scrub');
+    el.value = String(Math.round(S.totalLen ? (S.pos / S.totalLen) * 1000 : 0));
+  }
+
+  function syncCoach() {
+    if (!S.steps.length) {
+      $('coach').hidden = true;
+      $('step-label').textContent = '未生成';
+      return;
+    }
+    var at = stepAt(S.pos);
+    var st = S.steps[at.i];
+    $('coach').hidden = false;
+    $('coach-idx').textContent = '第 ' + (at.i + 1) + ' 步 / 共 ' + S.steps.length + ' 步 · ' +
+      (st.strokes.length > 1 ? st.strokes.length + ' 笔' : '1 笔');
+    $('coach-title').textContent = st.title;
+    $('coach-note').textContent = st.note;
+    $('step-label').textContent = '第 ' + (at.i + 1) + ' / ' + S.steps.length + ' 步';
+    syncScrub();
+
+    if (at.i !== S.lastCur) {
+      S.lastCur = at.i;
+      var list = $('step-list').children;
+      for (var i = 0; i < list.length; i++) {
+        list[i].classList.toggle('on', i === at.i);
+        list[i].classList.toggle('done', i < at.i);
+      }
+      var on = list[at.i];
+      if (on && on.scrollIntoView) {
+        var box = $('step-list').getBoundingClientRect(), er = on.getBoundingClientRect();
+        if (er.top < box.top + 4 || er.bottom > box.bottom - 4) {
+          on.scrollIntoView({ block: 'nearest' });
+        }
+      }
+    }
+  }
+
+  /* ===================================================================
+   * 步骤列表
+   * =================================================================== */
+
+  function recalc(step) {
+    var len = 0;
+    for (var i = 0; i < step.strokes.length; i++) {
+      var s = S.plan.strokes[step.strokes[i]];
+      if (s) len += s.len;
+    }
+    step.len = len;
+    return len;
+  }
+
+  function recalcAll() {
+    S.totalLen = 0;
+    for (var i = 0; i < S.steps.length; i++) S.totalLen += recalc(S.steps[i]);
+  }
+
+  function renderSteps() {
+    var list = $('step-list');
+    list.innerHTML = '';
+    $('step-count').textContent = S.steps.length ? S.steps.length + ' 步' : '';
+    $('step-empty').hidden = S.steps.length > 0;
+
+    S.steps.forEach(function (st, i) {
+      var info = KIND[st.kind] || KIND.other;
+      var li = document.createElement('li');
+      li.className = 'step';
+      li.dataset.i = i;
+
+      var n = document.createElement('div');
+      n.className = 'n';
+      n.textContent = i + 1;
+
+      var body = document.createElement('div');
+      body.className = 'body';
+
+      var ttl = document.createElement('div');
+      ttl.className = 'ttl';
+      var badge = document.createElement('span');
+      badge.className = 'badge';
+      badge.style.color = info.color;
+      badge.style.borderColor = info.color + '55';
+      badge.style.background = info.color + '18';
+      badge.textContent = info.short;
+      badge.title = '点击切换线型';
+      var name = document.createElement('span');
+      name.className = 'name';
+      name.textContent = st.title;
+      ttl.appendChild(badge); ttl.appendChild(name);
+
+      var note = document.createElement('div');
+      note.className = 'note';
+      note.textContent = st.note;
+
+      var ops = document.createElement('div');
+      ops.className = 'ops';
+      ops.innerHTML =
+        '<button data-op="up" title="上移">↑</button>' +
+        '<button data-op="down" title="下移">↓</button>' +
+        '<button data-op="merge" title="并入上一步">⇤</button>' +
+        '<button data-op="del" class="del" title="删除这一步">✕</button>';
+
+      body.appendChild(ttl); body.appendChild(note); body.appendChild(ops);
+      li.appendChild(n); li.appendChild(body);
+      list.appendChild(li);
+
+      // 点整行 → 跳到这一步
+      li.addEventListener('click', function (e) {
+        if (e.target.isContentEditable) return;
+        if (e.target.closest('[data-op]') || e.target === badge) return;
+        jump(i);
+      });
+
+      // 点线型徽章 → 循环切换
+      badge.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var k = ORDER.indexOf(st.kind);
+        st.kind = ORDER[(k + 1) % ORDER.length];
+        st.short = KIND[st.kind].short;
+        st.note = KIND[st.kind].note2 || st.note;
+        renderSteps(); syncCoach(); render();
+      });
+
+      // 双击标题/要点 → 改字
+      li.addEventListener('dblclick', function (e) {
+        var el = e.target.closest('.name, .note');
+        if (!el) return;
+        el.contentEditable = 'true';
+        el.focus();
+        var sel = window.getSelection();
+        var range = document.createRange();
+        range.selectNodeContents(el);
+        sel.removeAllRanges(); sel.addRange(range);
+      });
+      li.addEventListener('blur', function (e) {
+        var el = e.target;
+        if (!el.isContentEditable) return;
+        el.contentEditable = 'false';
+        if (el.classList.contains('name')) st.title = el.textContent.trim() || st.title;
+        if (el.classList.contains('note')) st.note = el.textContent.trim();
+        syncCoach();
+      }, true);
+
+      ops.addEventListener('click', function (e) {
+        var op = e.target.dataset.op;
+        if (!op) return;
+        e.stopPropagation();
+        if (op === 'up' && i > 0) { swap(i, i - 1); }
+        else if (op === 'down' && i < S.steps.length - 1) { swap(i, i + 1); }
+        else if (op === 'merge' && i > 0) {
+          S.steps[i - 1].strokes = S.steps[i - 1].strokes.concat(st.strokes);
+          S.steps[i - 1].note = (S.steps[i - 1].note || '') ;
+          S.steps.splice(i, 1);
+          recalcAll(); renderSteps(); syncCoach(); render();
+        }
+        else if (op === 'del') {
+          S.steps.splice(i, 1);
+          recalcAll();
+          if (S.pos > S.totalLen) S.pos = S.totalLen;
+          renderSteps(); syncCoach(); render();
+        }
+      });
+    });
+
+    syncCoach();
+  }
+
+  function swap(a, b) {
+    var t = S.steps[a]; S.steps[a] = S.steps[b]; S.steps[b] = t;
+    recalcAll();
+    var acc = 0;
+    for (var i = 0; i < Math.min(a, b); i++) acc += S.steps[i].len;
+    S.pos = acc;
+    renderSteps(); render();
+  }
+
+  /* ===================================================================
+   * 解析
+   * =================================================================== */
+
+  function busy(on, text) {
+    S.busy = on;
+    $('busy').hidden = !on;
+    if (text) $('busy-text').textContent = text;
+    $('btn-run').disabled = on;
+  }
+
+  function opts() {
+    var thrMode = $('opt-threshold').value;
+    return {
+      maxDim: +$('opt-maxdim').value,
+      adaptive: thrMode === 'auto',
+      threshold: thrMode === 'manual' ? +$('opt-threshold-val').value : null,
+      invert: $('opt-invert').checked,
+      minLen: +$('opt-minlen').value,
+      mergeTol: +$('opt-merge').value,
+      ignoreRects: S.ignoreRects
+    };
+  }
+
+  function run() {
+    if (!S.img || S.busy) return;
+    busy(true, '正在解析线条…');
+    setTimeout(function () {
+      var t0 = performance.now();
+      var plan;
+      try {
+        var g = S.img.getContext('2d');
+        var data = g.getImageData(0, 0, S.imgW, S.imgH);
+        plan = Engine.buildPlan(
+          { data: data.data, width: S.imgW, height: S.imgH, channels: 4 },
+          opts()
+        );
+      } catch (err) {
+        busy(false);
+        alert('解析失败：' + err.message);
+        console.error(err);
+        return;
+      }
+      S.plan = plan;
+      S.steps = plan.steps.map(function (s) {
+        return {
+          kind: s.kind, title: s.title, note: s.note,
+          strokes: s.strokes.slice(), len: s.len, bbox: s.bbox, region: s.region,
+          short: s.short
+        };
+      });
+      recalcAll();
+      S.pos = 0;
+      S.lastCur = -1;
+      $('empty-hint').hidden = true;
+      updateStats(performance.now() - t0, plan);
+      renderSteps();
+      render();
+      busy(false);
+      var at = /[?&]at=([\d.]+)/.exec(location.search);
+      if (at) { S.pos = S.totalLen * Math.max(0, Math.min(1, parseFloat(at[1]))); syncCoach(); render(); }
+      if (location.search.indexOf('selftest') >= 0) selftestDump(plan);
+    }, 50);
+  }
+
+  function updateStats(ms, plan) {
+    $('stats').innerHTML =
+      '<div class="stat"><b>' + plan.strokes.length + '</b><span>笔画</span></div>' +
+      '<div class="stat"><b>' + plan.steps.length + '</b><span>步骤</span></div>' +
+      '<div class="stat"><b>' + Math.round(ms) + '</b><span>毫秒</span></div>';
+
+    var counts = {};
+    S.steps.forEach(function (s) { counts[s.kind] = (counts[s.kind] || 0) + 1; });
+    var html = '';
+    ORDER.forEach(function (k) {
+      if (!counts[k]) return;
+      var info = KIND[k];
+      html += '<div class="lg"><i style="background:' + info.color + '"></i>' +
+        info.label + '<b>' + counts[k] + ' 步</b></div>';
+    });
+    $('legend').innerHTML = html;
+  }
+
+  /* ===================================================================
+   * 图片载入
+   * =================================================================== */
+
+  function setSource(source) {
+    var maxSide = 2600;
+    var w = source.width || source.naturalWidth, h = source.height || source.naturalHeight;
+    var s = Math.min(1, maxSide / Math.max(w, h));
+    var c = document.createElement('canvas');
+    c.width = Math.round(w * s);
+    c.height = Math.round(h * s);
+    var g = c.getContext('2d');
+    g.fillStyle = '#fff';
+    g.fillRect(0, 0, c.width, c.height);
+    g.drawImage(source, 0, 0, c.width, c.height);
+    S.img = c;
+    S.imgW = c.width;
+    S.imgH = c.height;
+    S.plan = null;
+    S.steps = [];
+    S.ignoreRects = [];
+    S.pos = 0;
+    S.totalLen = 0;
+    S.lastCur = -1;
+    $('empty-hint').hidden = true;
+    $('coach').hidden = true;
+    $('step-label').textContent = '未生成';
+    $('step-count').textContent = '';
+    $('step-list').innerHTML = '';
+    $('step-empty').hidden = false;
+    $('stats').innerHTML =
+      '<div class="stat"><b>—</b><span>笔画</span></div>' +
+      '<div class="stat"><b>—</b><span>步骤</span></div>' +
+      '<div class="stat"><b>—</b><span>耗时</span></div>';
+    $('legend').innerHTML = '';
+    render();
+  }
+
+  function loadFile(file) {
+    if (!file || !/^image\//.test(file.type)) return;
+    var url = URL.createObjectURL(file);
+    var img = new Image();
+    img.onload = function () {
+      setSource(img);
+      URL.revokeObjectURL(url);
+      run();
+    };
+    img.onerror = function () { URL.revokeObjectURL(url); alert('这张图读不了，换一张试试'); };
+    img.src = url;
+  }
+
+  function useDemo() {
+    var c = document.createElement('canvas');
+    c.width = Demo.width;
+    c.height = Demo.height;
+    Demo.draw(c.getContext('2d'));
+    setSource(c);
+    run();
+  }
+
+  /* ===================================================================
+   * 导出
+   * =================================================================== */
+
+  function download(url, name) {
+    var a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () { a.remove(); }, 100);
+  }
+
+  function exportPNG() {
+    if (!S.plan) { alert('先导入图纸并生成步骤'); return; }
+    var c = document.createElement('canvas');
+    c.width = S.plan.w;
+    c.height = S.plan.h;
+    var g = c.getContext('2d');
+    g.fillStyle = '#fff';
+    g.fillRect(0, 0, c.width, c.height);
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    for (var i = 0; i < S.steps.length; i++) {
+      var st = S.steps[i];
+      for (var j = 0; j < st.strokes.length; j++) {
+        var s = S.plan.strokes[st.strokes[j]];
+        if (!s || !s.pts || s.pts.length < 2) continue;
+        g.beginPath();
+        g.moveTo(s.pts[0][0], s.pts[0][1]);
+        for (var k = 1; k < s.pts.length; k++) g.lineTo(s.pts[k][0], s.pts[k][1]);
+        g.strokeStyle = '#111';
+        g.lineWidth = strokeWidthOf(st.kind) * 1.15;
+        g.stroke();
+      }
+    }
+    download(c.toDataURL('image/png'), '机械制图-成图.png');
+  }
+
+  function exportSteps() {
+    if (!S.steps.length) { alert('先导入图纸并生成步骤'); return; }
+    var lines = ['# 机械制图分步练习', '', '按顺序画出下面 ' + S.steps.length + ' 步：', ''];
+    S.steps.forEach(function (st, i) {
+      var info = KIND[st.kind] || KIND.other;
+      lines.push('## 第 ' + (i + 1) + ' 步 · ' + st.title + '（' + info.short + '，' + st.strokes.length + ' 笔）');
+      lines.push('');
+      lines.push(st.note);
+      lines.push('');
+    });
+    var blob = new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' });
+    download(URL.createObjectURL(blob), '机械制图-步骤清单.md');
+  }
+
+  /* ===================================================================
+   * 自检（给无头浏览器截图/校验用）
+   * =================================================================== */
+
+  function selftestDump(plan) {
+    var summary = {
+      ok: true,
+      errors: window.__ERRORS || [],
+      scrollW: document.documentElement.scrollWidth,
+      clientW: document.documentElement.clientWidth,
+      size: [plan.w, plan.h],
+      strokes: plan.strokes.length,
+      steps: plan.steps.map(function (s) {
+        return { kind: s.kind, title: s.title, n: s.strokes.length, len: Math.round(s.len) };
+      }),
+      kinds: (function () {
+        var c = {};
+        plan.strokes.forEach(function (s) { c[s.kind] = (c[s.kind] || 0) + 1; });
+        return c;
+      })()
+    };
+    var el = $('selftest-output');
+    el.hidden = false;
+    el.textContent = 'SELFTEST_JSON:' + JSON.stringify(summary);
+    document.title = 'SELFTEST_DONE';
+  }
+
+  /* ===================================================================
+   * 事件绑定
+   * =================================================================== */
+
+  function bind() {
+    // 手机上的设置抽屉
+    var drawer = function (on) {
+      $('panel-left').classList.toggle('open', on);
+      $('drawer-mask').classList.toggle('on', on);
+    };
+    $('btn-settings').addEventListener('click', function () {
+      drawer(!$('panel-left').classList.contains('open'));
+    });
+    $('drawer-mask').addEventListener('click', function () { drawer(false); });
+
+    $('btn-import').addEventListener('click', function () { $('file-input').click(); });
+    $('file-input').addEventListener('change', function (e) {
+      if (e.target.files && e.target.files[0]) loadFile(e.target.files[0]);
+      e.target.value = '';
+    });
+    $('btn-demo').addEventListener('click', useDemo);
+    $('btn-run').addEventListener('click', function () {
+      if (window.innerWidth <= 860) {
+        $('panel-left').classList.remove('open');
+        $('drawer-mask').classList.remove('on');
+      }
+      run();
+    });
+    $('btn-play').addEventListener('click', togglePlay);
+    $('btn-prev').addEventListener('click', function () { stop(); jump(stepAt(S.pos).i - 1); });
+    $('btn-next').addEventListener('click', function () { stop(); jump(stepAt(S.pos).i + 1); });
+    $('btn-export').addEventListener('click', exportPNG);
+
+    $('opt-threshold').addEventListener('change', function (e) {
+      $('thr-wrap').hidden = e.target.value !== 'manual';
+    });
+    $('opt-threshold-val').addEventListener('input', function (e) {
+      $('thr-val').textContent = e.target.value;
+    });
+    $('opt-minlen').addEventListener('input', function (e) {
+      $('minlen-val').textContent = e.target.value;
+    });
+    $('opt-merge').addEventListener('input', function (e) {
+      $('merge-val').textContent = e.target.value;
+    });
+    $('opt-speed').addEventListener('change', function (e) { S.speed = +e.target.value; });
+    $('opt-ghost').addEventListener('change', function (e) { S.ghost = e.target.value; render(); });
+
+    $('scrub').addEventListener('input', function (e) {
+      stop();
+      S.pos = (e.target.value / 1000) * S.totalLen;
+      syncCoach();
+      render();
+    });
+
+    // 框选忽略区
+    $('btn-ignore').addEventListener('click', function () {
+      S.ignoring = !S.ignoring;
+      $('btn-ignore').classList.toggle('primary', S.ignoring);
+      $('btn-ignore').textContent = S.ignoring ? '框选中…（点此退出）' : '框掉文字';
+      $('ignore-tip').hidden = !S.ignoring;
+      cv.classList.toggle('crosshair', S.ignoring);
+    });
+    $('btn-clear-ignore').addEventListener('click', function () {
+      S.ignoreRects = [];
+      render();
+      if (S.img) run();
+    });
+
+    // 画布拖拽框选
+    var toImg = function (ev) {
+      var r = cv.getBoundingClientRect();
+      var x = ev.clientX - r.left, y = ev.clientY - r.top;
+      return { x: (x - S.view.ox) / S.view.s, y: (y - S.view.oy) / S.view.s };
+    };
+    cv.addEventListener('pointerdown', function (ev) {
+      if (!S.ignoring || !S.img) return;
+      cv.setPointerCapture(ev.pointerId);
+      var p = toImg(ev);
+      S.dragRect = { x: p.x, y: p.y, w: 0, h: 0 };
+      S._dragStart = p;
+    });
+    cv.addEventListener('pointermove', function (ev) {
+      if (!S.dragRect) return;
+      var p = toImg(ev), s = S._dragStart;
+      S.dragRect = {
+        x: Math.min(s.x, p.x), y: Math.min(s.y, p.y),
+        w: Math.abs(p.x - s.x), h: Math.abs(p.y - s.y)
+      };
+      render();
+    });
+    cv.addEventListener('pointerup', function () {
+      if (!S.dragRect) return;
+      var r = S.dragRect;
+      S.dragRect = null;
+      if (r.w > 6 && r.h > 6) {
+        var sc = S.plan ? S.plan.scale : 1;
+        // 存的是源图坐标：画布坐标除以缩放
+        S.ignoreRects.push({ x: r.x / sc, y: r.y / sc, w: r.w / sc, h: r.h / sc });
+        if (S.img) run();
+      }
+      render();
+    });
+
+    // 拖放
+    var stage = $('stage');
+    ['dragenter', 'dragover'].forEach(function (t) {
+      stage.addEventListener(t, function (e) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+    });
+    stage.addEventListener('drop', function (e) {
+      e.preventDefault();
+      var f = e.dataTransfer.files && e.dataTransfer.files[0];
+      if (f) loadFile(f);
+    });
+
+    // 粘贴
+    window.addEventListener('paste', function (e) {
+      var items = e.clipboardData && e.clipboardData.items;
+      if (!items) return;
+      for (var i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image') === 0) {
+          loadFile(items[i].getAsFile());
+          e.preventDefault();
+          return;
+        }
+      }
+    });
+
+    // 键盘
+    window.addEventListener('keydown', function (e) {
+      if (e.target.isContentEditable || /input|select|textarea/i.test(e.target.tagName)) return;
+      if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); stop(); jump(stepAt(S.pos).i - 1); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); stop(); jump(stepAt(S.pos).i + 1); }
+      else if (e.key === 'Home') { stop(); S.pos = 0; syncCoach(); render(); }
+      else if (e.key === 'End') { stop(); S.pos = S.totalLen; syncCoach(); render(); }
+    });
+
+    // 帮助
+    $('btn-help').addEventListener('click', function () { $('help').hidden = false; });
+    $('btn-help-close').addEventListener('click', function () { $('help').hidden = true; });
+    $('help').addEventListener('click', function (e) { if (e.target.id === 'help') $('help').hidden = true; });
+
+    if (window.ResizeObserver) {
+      new ResizeObserver(resize).observe(cv);
+    } else {
+      window.addEventListener('resize', resize);
+    }
+  }
+
+  /* ===================================================================
+   * 启动
+   * =================================================================== */
+
+  function boot() {
+    window.__ERRORS = [];
+    window.addEventListener('error', function (e) {
+      window.__ERRORS.push(String(e.message || e.error));
+    });
+    // 类型切换时用的默认要点
+    Object.keys(KIND).forEach(function (k) {
+      KIND[k].note2 = {
+        center: '细点划线。先画它定圆心和对称基准。',
+        thick: '粗实线（约 0.7 mm）。先定大形，一笔画到底。',
+        circle: '粗实线圆。圆心由中心线交点定，圆规一次画成。',
+        thin: '细实线（约 0.35 mm）。尺寸界线、剖面线、过渡线用。',
+        hidden: '虚线。线段 3~4 mm、间隔 1 mm，与粗实线相接留空。',
+        other: '补齐剩余线条。'
+      }[k];
+    });
+
+    bind();
+    resize();
+    render();
+
+    if (location.search.indexOf('demo') >= 0 || location.search.indexOf('selftest') >= 0) {
+      setTimeout(useDemo, 120);
+    } else {
+      // 首次打开提示用例
+      setTimeout(function () { /* 保持空态 */ }, 0);
+    }
+    // 暴露给调试
+    window.__APP = { S: S, run: run, render: render, useDemo: useDemo, exportSteps: exportSteps };
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+})();
+
+</script>
+</body>
+</html>
