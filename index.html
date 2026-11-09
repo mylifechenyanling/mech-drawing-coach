@@ -445,6 +445,7 @@ kbd {
         <button id="m-teach" class="btn primary">教学步骤</button>
         <button id="m-trace" class="btn">描线</button>
         <button id="m-conic" class="btn">截交线</button>
+        <button id="m-pierce" class="btn">相贯线</button>
       </div>
       <button id="btn-settings" class="btn">⚙ 设置</button>
       <button id="btn-import" class="btn primary">导入图纸</button>
@@ -2507,6 +2508,165 @@ kbd {
 </script>
 <script>
 /*!
+ * 相贯线引擎 pierce.js
+ *
+ * 圆锥与圆柱相贯 —— 解析求交。
+ *
+ * 仍然是一个面参数化、代入另一个面：
+ *   圆锥：x² + y² = (R·z/H)²        轴向 z，锥顶在 z=0
+ *   圆柱：x² + (z-zc)² = rc²         轴线沿 y，高度 zc
+ *
+ * 圆柱按 φ 参数化：x = rc·cosφ, z = zc + rc·sinφ
+ * 代入圆锥：y² = (R·z/H)² − x²
+ * 每个 φ 最多给两个点（前、后各一），这就是相贯线的两支。
+ */
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory();
+  else root.Pierce = factory();
+})(typeof self !== 'undefined' ? self : this, function () {
+  'use strict';
+
+  function build(opts) {
+    var R = opts.R, H = opts.H;          // 圆锥底半径、高
+    var rc = opts.rc, zc = opts.zc;      // 圆柱半径、轴线高度
+
+    var front = [], back = [];           // 前支（y>0）、后支（y<0）
+    var N = 720;
+    for (var i = 0; i <= N; i++) {
+      var phi = i / N * Math.PI * 2;
+      var x = rc * Math.cos(phi);
+      var z = zc + rc * Math.sin(phi);
+      if (z <= 0.2 || z > H - 0.2) continue;
+      var r = R * z / H;
+      var y2 = r * r - x * x;
+      if (y2 <= 0) continue;
+      var y = Math.sqrt(y2);
+      front.push({ x: x, y: y, z: z });
+      back.push({ x: x, y: -y, z: z });
+    }
+    if (!front.length) return { error: '这两个立体没有相交' };
+
+    // 特殊点：y≈0 的地方（曲线与圆锥轮廓素线的交点）
+    var specials = [];
+    var prevY = front[0].y;
+    for (var k = 1; k < front.length; k++) {
+      if ((prevY === 0) || (front[k].y < 2.5)) {
+        specials.push(front[k]);
+      }
+      prevY = front[k].y;
+    }
+    // 与圆柱轮廓（φ=0、π）的交点
+    var cylPts = [];
+    var mid = front[Math.floor(front.length / 2)];
+    [0, Math.PI].forEach(function (a) {
+      var x2 = rc * Math.cos(a), z2 = zc + rc * Math.sin(a);
+      var r2 = R * z2 / H;
+      var yy = r2 * r2 - x2 * x2;
+      if (yy > 0) cylPts.push({ x: x2, y: Math.sqrt(yy), z: z2 });
+    });
+
+    // 辅助水平面求一般点：每个高度 z 上，圆锥给纬圆、圆柱给两条直线
+    var aux = [];
+    var zs = [zc - rc * 0.75, zc - rc * 0.25, zc + rc * 0.25, zc + rc * 0.75];
+    zs.forEach(function (z) {
+      if (z <= 1 || z >= H - 1) return;
+      var dz = z - zc;
+      if (Math.abs(dz) >= rc) return;
+      var x = Math.sqrt(rc * rc - dz * dz);
+      var r = R * z / H;
+      var y2 = r * r - x * x;
+      if (y2 <= 0) return;
+      aux.push({ z: z, r: r, x: x, y: Math.sqrt(y2) });
+    });
+
+    return {
+      R: R, H: H, rc: rc, zc: zc,
+      front: front, back: back, aux: aux, cylPts: cylPts,
+      minY: Math.min.apply(null, front.map(function (p) { return p.y; })),
+      maxY: Math.max.apply(null, front.map(function (p) { return p.y; }))
+    };
+  }
+
+  function toSteps(D) {
+    var R = D.R, H = D.H, rc = D.rc, zc = D.zc;
+    var W = 2 * R, DD = 2 * R;
+    var cx = R, cy = R;
+    var steps = [];
+    function push(t, n, s) { steps.push({ title: t, note: n, shapes: s || [], guides: [] }); }
+    function P(x, z) { return [x + cx, z]; }
+    function Pt(x, y) { return [x + cx, y + cy]; }
+
+    // ① 两个立体的三视图
+    push('① 画圆锥和圆柱的三视图',
+      '先把两个立体各自的三视图画全：圆锥是三角形 + 底圆，圆柱是矩形 + 圆。' +
+      '画相贯线之前，两个立体的轮廓必须都先定下来，否则交点没有地方落。',
+      [{ t: 'polys', view: 'front', polys: [{ pts: [P(-R, H), P(0, 0), P(R, H), P(-R, H)], style: 'solid' }] },
+       { t: 'polys', view: 'front', polys: [{ pts: [P(-rc, zc - rc), P(rc, zc - rc), P(rc, zc + rc), P(-rc, zc + rc), P(-rc, zc - rc)], style: 'solid' }] },
+       { t: 'circle', view: 'top', cu: cx, cw: cy, r: R },
+       { t: 'polys', view: 'top', polys: [{ pts: [Pt(-rc, -R), Pt(-rc, R)], style: 'solid' }, { pts: [Pt(rc, -R), Pt(rc, R)], style: 'solid' }] },
+       { t: 'polys', view: 'left', polys: [{ pts: [P(-R, H), P(0, 0), P(R, H), P(-R, H)], style: 'solid' }] },
+       { t: 'circle', view: 'left', cu: cx, cw: zc, r: rc },
+       { t: 'center', view: 'front', cu: cx, cw: H / 2, arm: H / 2 + 4 },
+       { t: 'center', view: 'left', cu: cx, cw: zc, arm: rc + 5 }]);
+
+    // ② 特殊点
+    var sh = [];
+    D.specials = D.cylPts.concat(D.front.filter(function (p) { return p.y < 2.5; }));
+    D.specials.forEach(function (p) {
+      sh.push({ t: 'dot', view: 'front', u: p.x + cx, w: p.z });
+      sh.push({ t: 'dot', view: 'top', u: p.x + cx, w: p.y + cy });
+      sh.push({ t: 'dot', view: 'left', u: p.y + cx, w: p.z });
+    });
+    push('② 求特殊点',
+      '相贯线的特殊点都在轮廓线上：圆柱的最左/最右素线与圆锥的交点、' +
+      '以及曲线转到最后的那个点。这些点直接在主视图上量出来，再按长对正、高平齐投到另外两个视图。',
+      sh);
+
+    // ③ 辅助平面
+    var sh3 = [];
+    D.aux.forEach(function (a) {
+      sh3.push({ t: 'circle', view: 'top', cu: cx, cw: cy, r: a.r });
+      sh3.push({ t: 'polys', view: 'top', polys: [{ pts: [Pt(-a.x, -R), Pt(-a.x, R)], style: 'aux' },
+                                                   { pts: [Pt(a.x, -R), Pt(a.x, R)], style: 'aux' }] });
+      sh3.push({ t: 'dot', view: 'top', u: -a.x + cx, w: a.y + cy });
+      sh3.push({ t: 'dot', view: 'top', u: a.x + cx, w: a.y + cy });
+      sh3.push({ t: 'polys', view: 'front', polys: [{ pts: [P(-R, a.z), P(R, a.z)], style: 'aux' }] });
+      sh3.push({ t: 'dot', view: 'front', u: -a.x + cx, w: a.z });
+      sh3.push({ t: 'dot', view: 'front', u: a.x + cx, w: a.z });
+    });
+    push('③ 作辅助平面求一般点',
+      '特殊点之间还要补点：作水平辅助面，它和圆锥交出纬圆、和圆柱交出两条直线，' +
+      '交点就是相贯线上的点。换几个高度重复，点就够了。',
+      sh3);
+
+    // ④ 连曲线
+    function seg(view, key) {
+      return { t: 'polys', view: view, polys: [{
+        pts: D[key].map(function (p) {
+          return view === 'front' ? P(p.x, p.z) : (view === 'top' ? Pt(p.x, p.y) : P(p.y, p.z));
+        }), style: 'solid'
+      }] };
+    }
+    push('④ 光滑连接相贯线',
+      '把点按顺序连成光滑曲线。前后各一支，形状左右对称。' +
+      '相贯线永远是两个立体表面的交线，不是画上去的装饰线——它一定同时落在两个表面上。',
+      [seg('front', 'front'), seg('top', 'front'), seg('top', 'back'),
+       seg('left', 'front'), seg('left', 'back')]);
+
+    push('⑤ 判断可见性',
+      '相贯线在俯视图和左视图上分前后：靠观察者的一半可见（粗实线），另一半不可见（虚线）。' +
+      '主视图上两支重合成一条线。',
+      []);
+
+    return { W: W, D: DD, H: H, gap: Math.max(16, R * 0.55), steps: steps, type: '相贯线' };
+  }
+
+  return { build: build, toSteps: toSteps };
+});
+
+</script>
+<script>
+/*!
  * 内置示例图纸：一个「L 形支架」的三视图（第一角法）
  * 全部用 Canvas 2D 现画，不依赖外部图片，打开就能用。
  * 单位：毫米；S = 每毫米像素数。
@@ -2721,7 +2881,7 @@ kbd {
 
 </script>
 <script>
-/*!
+﻿/*!
  * 机械制图分步教练 · app.js
  * 界面、画布动画、步骤编辑。
  */
@@ -2789,7 +2949,7 @@ kbd {
   }
 
   function stepAt(pos) {
-    if (S.mode === 'teach' || S.mode === 'conic') {
+    if (S.mode === 'teach' || S.mode === 'conic' || S.mode === 'pierce') {
       var n = S.steps.length;
       if (!n) return { i: 0, f: 0 };
       var p = Math.max(0, Math.min(n - 1e-6, pos));
@@ -3221,7 +3381,7 @@ kbd {
   }
 
   function render() {
-    if ((S.mode === 'teach' || S.mode === 'conic') && S.teach) { renderTeach(); return; }
+    if ((S.mode === 'teach' || S.mode === 'conic' || S.mode === 'pierce') && S.teach) { renderTeach(); return; }
     var w = cv.clientWidth, h = cv.clientHeight;
     if (!w || !h) return;
     ctx.setTransform(S.dpr, 0, 0, S.dpr, 0, 0);
@@ -3308,7 +3468,7 @@ kbd {
     if (!S.playing) { S.raf = 0; return; }
     var dt = S.lastTs ? Math.min(0.06, (ts - S.lastTs) / 1000) : 0.016;
     S.lastTs = ts;
-    var v = (S.mode === 'teach' || S.mode === 'conic') ? (S.speed / 1.6) : (820 * S.speed);
+    var v = (S.mode === 'teach' || S.mode === 'conic' || S.mode === 'pierce') ? (S.speed / 1.6) : (820 * S.speed);
     S.pos += v * dt;
     if (S.pos >= S.totalLen) { S.pos = S.totalLen; stop(); }
     syncCoach();
@@ -3339,7 +3499,7 @@ kbd {
   function jump(stepIndex) {
     if (!S.steps.length) return;
     stepIndex = Math.max(0, Math.min(S.steps.length - 1, stepIndex));
-    if (S.mode === 'teach' || S.mode === 'conic') {
+    if (S.mode === 'teach' || S.mode === 'conic' || S.mode === 'pierce') {
       S.pos = stepIndex;
       syncCoach(); syncScrub(); render();
       return;
@@ -3785,13 +3945,42 @@ kbd {
       '<div class="lg"><i style="background:#2f7dd1"></i>辅助平面<b>' + D.aux.length + ' 个</b></div>';
   }
 
+  function startPierce() {
+    var D = Pierce.build({ R: 34, H: 62, rc: 15, zc: 40 });
+    if (D.error) { alert(D.error); return; }
+    var T = Pierce.toSteps(D);
+    S.teach = T;
+    S.steps = T.steps.map(function (s) {
+      return { title: s.title, note: s.note, strokes: [], len: 1, teach: true, kind: 'thick' };
+    });
+    S.totalLen = S.steps.length;
+    S.pos = 0;
+    var atP = /[?&]at=([\d.]+)/.exec(location.search);
+    if (atP) S.pos = S.totalLen * Math.max(0, Math.min(0.999, parseFloat(atP[1])));
+    S.lastCur = -1;
+    $('empty-hint').hidden = true;
+    $('coach').hidden = false;
+    $('stats').innerHTML =
+      '<div class="stat"><b>' + D.front.length + '</b><span>采样点</span></div>' +
+      '<div class="stat"><b>' + S.steps.length + '</b><span>步骤</span></div>' +
+      '<div class="stat"><b>' + D.aux.length + '</b><span>辅助面</span></div>';
+    $('legend').innerHTML =
+      '<div class="lg"><i style="background:#1b1b1b"></i>相贯线<b>2 支</b></div>' +
+      '<div class="lg"><i style="background:#d4553a"></i>最远点 y<b>' + Math.round(D.maxY) + '</b></div>' +
+      '<div class="lg"><i style="background:#7a63d6"></i>圆柱半径<b>' + D.rc + '</b></div>';
+    renderSteps();
+    syncCoach();
+    render();
+  }
   function setMode(m) {
     S.mode = m;
     $('m-teach').classList.toggle('primary', m === 'teach');
     $('m-trace').classList.toggle('primary', m === 'trace');
     $('m-conic').classList.toggle('primary', m === 'conic');
+    $('m-pierce').classList.toggle('primary', m === 'pierce');
     $('btn-views').style.display = m === 'teach' ? '' : 'none';
     if (m === 'conic') { startConic(); return; }
+    if (m === 'pierce') { startPierce(); return; }
     if (!S.img) return;
     if (m === 'teach' && !S.views) startWizard();
     else run();
@@ -3909,6 +4098,7 @@ kbd {
     $('m-teach').addEventListener('click', function () { setMode('teach'); });
     $('m-trace').addEventListener('click', function () { setMode('trace'); });
     $('m-conic').addEventListener('click', function () { setMode('conic'); });
+    $('m-pierce').addEventListener('click', function () { setMode('pierce'); });
     $('btn-conic').addEventListener('click', function () { setMode('conic'); });
     $('opt-ca').addEventListener('input', function (e) {
       $('ca-val').textContent = e.target.value;
@@ -4104,7 +4294,9 @@ kbd {
     resize();
     render();
 
-    if (location.search.indexOf('conic') >= 0) {
+    if (location.search.indexOf('pierce') >= 0) {
+      setTimeout(function () { setMode('pierce'); }, 100);
+    } else if (location.search.indexOf('conic') >= 0) {
       setTimeout(function () { setMode('conic'); }, 100);
     } else if (location.search.indexOf('demo') >= 0 || location.search.indexOf('selftest') >= 0) {
       setTimeout(useDemo, 120);
